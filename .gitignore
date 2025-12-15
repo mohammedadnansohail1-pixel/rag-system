@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Secrets - NEVER commit
+.env
+.env.*
+secrets.yaml
+secrets.json
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/
+output/
+logs/
+*.log
+checkpoints/
+
+# Vector store data
+qdrant_data/
+chroma_data/
+
+# Model cache
+models/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/

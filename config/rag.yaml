@@ -1,0 +1,112 @@
+# RAG System Configuration
+# Change this file to modify behavior - no code changes needed
+
+project:
+  name: "rag-system"
+  version: "0.1.0"
+  log_level: "INFO"
+
+# ============================================================
+# SECRETS BACKEND
+# ============================================================
+secrets:
+  backend: env  # Options: env, file, vault
+
+# ============================================================
+# DOCUMENT SOURCES
+# ============================================================
+documents:
+  sources:
+    - path: "./data/raw"
+      file_types: [".pdf", ".md", ".txt", ".html"]
+      recursive: true
+  exclude_patterns:
+    - "*.pyc"
+    - "__pycache__"
+    - ".git"
+
+# ============================================================
+# CHUNKING (pluggable)
+# ============================================================
+chunking:
+  strategy: "recursive"  # Options: fixed, recursive, semantic
+  chunk_size: 512
+  chunk_overlap: 50
+  separators: ["\n\n", "\n", ". ", " "]
+
+# ============================================================
+# EMBEDDINGS (pluggable)
+# ============================================================
+embeddings:
+  provider: "ollama"  # Options: ollama, huggingface, openai
+  
+  ollama:
+    host: ${secret:OLLAMA_HOST}
+    model: "nomic-embed-text"
+    dimensions: 768
+    batch_size: 32
+  
+  openai:
+    api_key: ${secret:OPENAI_API_KEY}
+    model: "text-embedding-3-small"
+    dimensions: 1536
+
+# ============================================================
+# VECTOR STORE (pluggable)
+# ============================================================
+vectorstore:
+  provider: "qdrant"  # Options: qdrant, chroma, milvus
+  
+  qdrant:
+    host: ${secret:QDRANT_HOST}
+    port: ${secret:QDRANT_PORT}
+    collection_name: "documents"
+    distance_metric: "cosine"
+
+# ============================================================
+# RETRIEVAL
+# ============================================================
+retrieval:
+  search_type: "hybrid"  # Options: dense, sparse, hybrid
+  top_k: 5
+  score_threshold: 0.7
+  
+  reranker:
+    enabled: true
+    provider: "bge"
+    model: "bge-reranker-base"
+    top_n: 3
+
+# ============================================================
+# LLM (pluggable)
+# ============================================================
+llm:
+  provider: "ollama"  # Options: ollama, openai, anthropic
+  
+  ollama:
+    host: ${secret:OLLAMA_HOST}
+    model: ${secret:LLM_MODEL}
+    temperature: 0.1
+    max_tokens: 1024
+  
+  openai:
+    api_key: ${secret:OPENAI_API_KEY}
+    model: "gpt-4o-mini"
+    temperature: 0.1
+    max_tokens: 1024
+
+  system_prompt: |
+    You are a helpful assistant that answers questions based on the provided context.
+    Always cite the source of your information.
+    If the context doesn't contain the answer, say "I don't have enough information to answer this."
+
+# ============================================================
+# EVALUATION (RAGAS)
+# ============================================================
+evaluation:
+  enabled: true
+  metrics:
+    - faithfulness
+    - answer_relevancy
+    - context_precision
+    - context_recall

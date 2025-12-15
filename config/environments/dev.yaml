@@ -1,0 +1,29 @@
+# Development Environment Configuration
+# Overrides config/rag.yaml for local development
+
+environment: development
+
+# Local Qdrant (Docker)
+vectorstore:
+  qdrant:
+    host: localhost
+    port: 6333
+
+# Local Ollama
+embeddings:
+  ollama:
+    host: http://localhost:11434
+
+llm:
+  ollama:
+    host: http://localhost:11434
+    model: llama3.1:8b
+
+# Smaller chunks for testing
+chunking:
+  chunk_size: 256
+  chunk_overlap: 25
+
+# More verbose retrieval
+retrieval:
+  top_k: 10
