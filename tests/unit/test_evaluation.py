@@ -4,224 +4,143 @@ import pytest
 from unittest.mock import MagicMock
 
 from src.evaluation.metrics import (
+    RAGEvaluator,
     EvaluationResult,
     BatchEvaluationResult,
-    calculate_context_relevance,
-    calculate_answer_relevance_simple,
-    calculate_faithfulness_simple,
-    calculate_overall_score,
 )
-from src.evaluation.evaluator import RAGEvaluator
-
-
-class TestMetrics:
-    """Tests for evaluation metrics."""
-
-    def test_context_relevance_high_scores(self):
-        """Should return high relevance for high scores."""
-        score = calculate_context_relevance(
-            query="What is ML?",
-            contexts=["Machine learning is...", "ML algorithms..."],
-            scores=[0.9, 0.85]
-        )
-        assert score >= 0.8
-
-    def test_context_relevance_low_scores(self):
-        """Should return low relevance for low scores."""
-        score = calculate_context_relevance(
-            query="What is ML?",
-            contexts=["Cooking recipes..."],
-            scores=[0.2]
-        )
-        assert score <= 0.3
-
-    def test_context_relevance_empty(self):
-        """Should return 0 for empty scores."""
-        score = calculate_context_relevance(
-            query="Test",
-            contexts=[],
-            scores=[]
-        )
-        assert score == 0.0
-
-    def test_answer_relevance_good_match(self):
-        """Should return high score for relevant answer."""
-        score = calculate_answer_relevance_simple(
-            query="What is machine learning?",
-            answer="Machine learning is a subset of AI that enables systems to learn from data."
-        )
-        assert score >= 0.5
-
-    def test_answer_relevance_poor_match(self):
-        """Should return low score for irrelevant answer."""
-        score = calculate_answer_relevance_simple(
-            query="What is machine learning?",
-            answer="The weather today is sunny and warm."
-        )
-        assert score <= 0.3
-
-    def test_answer_relevance_empty(self):
-        """Should return 0 for empty answer."""
-        score = calculate_answer_relevance_simple(
-            query="Test",
-            answer=""
-        )
-        assert score == 0.0
-
-    def test_faithfulness_grounded(self):
-        """Should return high score for grounded answer."""
-        score = calculate_faithfulness_simple(
-            answer="According to the context, gradient descent is an optimization algorithm.",
-            contexts=["Gradient descent is an optimization algorithm used to minimize loss."]
-        )
-        assert score >= 0.5
-
-    def test_faithfulness_not_grounded(self):
-        """Should return lower score for ungrounded answer."""
-        score = calculate_faithfulness_simple(
-            answer="Quantum computing uses qubits for parallel processing.",
-            contexts=["Machine learning uses data to train models."]
-        )
-        assert score <= 0.5
-
-    def test_faithfulness_empty(self):
-        """Should return 0 for empty inputs."""
-        score = calculate_faithfulness_simple(
-            answer="",
-            contexts=[]
-        )
-        assert score == 0.0
-
-    def test_overall_score_calculation(self):
-        """Should calculate weighted overall score."""
-        score = calculate_overall_score(
-            context_relevance=0.8,
-            answer_relevance=0.7,
-            faithfulness=0.9
-        )
-        # Default weights: context=0.3, answer=0.3, faith=0.4
-        expected = (0.3 * 0.8 + 0.3 * 0.7 + 0.4 * 0.9)
-        assert abs(score - expected) < 0.01
-
-    def test_overall_score_custom_weights(self):
-        """Should use custom weights."""
-        score = calculate_overall_score(
-            context_relevance=1.0,
-            answer_relevance=0.0,
-            faithfulness=0.0,
-            weights={"context_relevance": 1.0, "answer_relevance": 0.0, "faithfulness": 0.0}
-        )
-        assert score == 1.0
 
 
 class TestEvaluationResult:
-    """Tests for EvaluationResult dataclass."""
-
-    def test_creation(self):
-        """Should create result with all fields."""
-        result = EvaluationResult(
-            query="Test query",
-            answer="Test answer",
-            context_relevance=0.8,
-            answer_relevance=0.7,
-            faithfulness=0.9,
-            overall_score=0.8
-        )
-        
-        assert result.query == "Test query"
-        assert result.overall_score == 0.8
-
-    def test_repr(self):
-        """Should have readable repr."""
-        result = EvaluationResult(
-            query="Test",
-            answer="Answer",
-            context_relevance=0.8,
-            answer_relevance=0.7,
-            faithfulness=0.9,
-            overall_score=0.8
-        )
-        
-        repr_str = repr(result)
-        assert "0.80" in repr_str
-
-
-class TestBatchEvaluationResult:
-    """Tests for BatchEvaluationResult dataclass."""
+    """Tests for EvaluationResult."""
 
     def test_to_dict(self):
         """Should convert to dictionary."""
-        result = BatchEvaluationResult(
-            results=[],
-            avg_context_relevance=0.8,
-            avg_answer_relevance=0.7,
-            avg_faithfulness=0.9,
-            avg_overall=0.8,
-            num_samples=10
+        result = EvaluationResult(
+            faithfulness=0.8,
+            relevance=0.7,
+            answer_relevance=0.9,
+            context_precision=0.6,
+            overall_score=0.75
         )
         
         d = result.to_dict()
-        assert d["num_samples"] == 10
-        assert d["avg_overall"] == 0.8
+        
+        assert d["faithfulness"] == 0.8
+        assert d["relevance"] == 0.7
+        assert d["overall_score"] == 0.75
 
 
 class TestRAGEvaluator:
     """Tests for RAGEvaluator."""
 
-    def test_evaluate_response(self):
-        """Should evaluate a response."""
-        mock_pipeline = MagicMock()
-        evaluator = RAGEvaluator(mock_pipeline)
+    def test_init(self):
+        """Should initialize with LLM."""
+        mock_llm = MagicMock()
+        evaluator = RAGEvaluator(mock_llm)
         
-        mock_response = MagicMock()
-        mock_response.answer = "Machine learning is a type of AI."
-        mock_response.sources = [
-            {"content": "ML is artificial intelligence", "score": 0.8}
-        ]
-        mock_response.avg_score = 0.8
-        mock_response.confidence = "high"
-        mock_response.validation_passed = True
+        assert evaluator.llm == mock_llm
+        assert "faithfulness" in evaluator.weights
+
+    def test_evaluate(self):
+        """Should evaluate RAG response."""
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "8"
         
-        result = evaluator.evaluate_response("What is ML?", mock_response)
+        evaluator = RAGEvaluator(mock_llm)
+        
+        result = evaluator.evaluate(
+            query="What is ML?",
+            answer="ML is machine learning.",
+            contexts=["Machine learning is a type of AI."]
+        )
         
         assert isinstance(result, EvaluationResult)
-        assert result.query == "What is ML?"
+        assert 0 <= result.faithfulness <= 1
         assert 0 <= result.overall_score <= 1
 
-    def test_evaluate_query(self):
-        """Should query pipeline and evaluate."""
-        mock_pipeline = MagicMock()
-        mock_response = MagicMock()
-        mock_response.answer = "Test answer"
-        mock_response.sources = [{"content": "Test", "score": 0.7}]
-        mock_response.avg_score = 0.7
-        mock_response.confidence = "medium"
-        mock_response.validation_passed = True
-        mock_pipeline.query.return_value = mock_response
+    def test_evaluate_empty_contexts(self):
+        """Should handle empty contexts."""
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "5"
         
-        evaluator = RAGEvaluator(mock_pipeline)
-        result = evaluator.evaluate_query("Test query")
+        evaluator = RAGEvaluator(mock_llm)
         
-        mock_pipeline.query.assert_called_once()
-        assert isinstance(result, EvaluationResult)
+        result = evaluator.evaluate(
+            query="What is ML?",
+            answer="I don't know.",
+            contexts=[]
+        )
+        
+        assert result.faithfulness == 0.0
+        assert result.relevance == 0.0
+        assert result.context_precision == 0.0
 
     def test_evaluate_batch(self):
         """Should evaluate multiple queries."""
-        mock_pipeline = MagicMock()
-        mock_response = MagicMock()
-        mock_response.answer = "Answer"
-        mock_response.sources = [{"content": "Context", "score": 0.7}]
-        mock_response.avg_score = 0.7
-        mock_response.confidence = "medium"
-        mock_response.validation_passed = True
-        mock_pipeline.query.return_value = mock_response
+        mock_llm = MagicMock()
+        mock_llm.generate.return_value = "7"
         
-        evaluator = RAGEvaluator(mock_pipeline)
-        result = evaluator.evaluate_batch([
-            {"query": "Query 1"},
-            {"query": "Query 2"},
-        ])
+        evaluator = RAGEvaluator(mock_llm)
+        
+        result = evaluator.evaluate_batch(
+            queries=["Q1", "Q2"],
+            answers=["A1", "A2"],
+            contexts_list=[["C1"], ["C2"]]
+        )
         
         assert isinstance(result, BatchEvaluationResult)
-        assert result.num_samples == 2
         assert len(result.results) == 2
+        assert 0 <= result.avg_overall_score <= 1
+
+    def test_extract_score(self):
+        """Should extract score from response."""
+        mock_llm = MagicMock()
+        evaluator = RAGEvaluator(mock_llm)
+        
+        assert evaluator._extract_score("8") == 8.0
+        assert evaluator._extract_score("Score: 7.5") == 7.5
+        assert evaluator._extract_score("I rate this 9 out of 10") == 9.0
+        assert evaluator._extract_score("no number here") == 5.0
+
+    def test_extract_score_clamps_values(self):
+        """Should clamp scores to 0-10."""
+        mock_llm = MagicMock()
+        evaluator = RAGEvaluator(mock_llm)
+        
+        assert evaluator._extract_score("15") == 10.0
+        assert evaluator._extract_score("-5") == 5.0  # No negative match
+
+    def test_custom_weights(self):
+        """Should accept custom weights."""
+        mock_llm = MagicMock()
+        custom_weights = {
+            "faithfulness": 0.5,
+            "relevance": 0.2,
+            "answer_relevance": 0.2,
+            "context_precision": 0.1,
+        }
+        
+        evaluator = RAGEvaluator(mock_llm, weights=custom_weights)
+        
+        assert evaluator.weights["faithfulness"] == 0.5
+
+
+class TestBatchEvaluationResult:
+    """Tests for BatchEvaluationResult."""
+
+    def test_to_dict(self):
+        """Should convert to dictionary."""
+        result = BatchEvaluationResult(
+            results=[],
+            avg_faithfulness=0.8,
+            avg_relevance=0.7,
+            avg_answer_relevance=0.9,
+            avg_context_precision=0.6,
+            avg_overall_score=0.75
+        )
+        
+        d = result.to_dict()
+        
+        assert d["num_queries"] == 0
+        assert d["avg_faithfulness"] == 0.8
+        assert d["avg_overall_score"] == 0.75
