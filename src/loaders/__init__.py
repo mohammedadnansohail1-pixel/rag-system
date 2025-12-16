@@ -13,6 +13,7 @@ from src.loaders.text_loader import TextLoader
 from src.loaders.markdown_loader import MarkdownLoader
 from src.loaders.pdf_loader import PDFLoader
 from src.loaders.google_drive_loader import GoogleDriveLoader
+from src.loaders.sec_loader import SECLoader
 
 __all__ = [
     "BaseLoader",
@@ -26,4 +27,5 @@ __all__ = [
     "MarkdownLoader",
     "PDFLoader",
     "GoogleDriveLoader",
+    "SECLoader",
 ]
