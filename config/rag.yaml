@@ -1,9 +1,8 @@
 # RAG System Configuration
 # Change this file to modify behavior - no code changes needed
-
 project:
   name: "rag-system"
-  version: "0.1.0"
+  version: "0.2.0"
   log_level: "INFO"
 
 # ============================================================
@@ -39,66 +38,94 @@ chunking:
 # ============================================================
 embeddings:
   provider: "ollama"  # Options: ollama, huggingface, openai
-  
   ollama:
     host: ${secret:OLLAMA_HOST}
     model: "nomic-embed-text"
     dimensions: 768
     batch_size: 32
-  
   openai:
     api_key: ${secret:OPENAI_API_KEY}
     model: "text-embedding-3-small"
     dimensions: 1536
 
 # ============================================================
+# SPARSE ENCODER (for hybrid retrieval)
+# ============================================================
+sparse_encoder:
+  provider: "splade"  # Options: splade, bm25
+  splade:
+    model: "naver/splade-cocondenser-ensembledistil"
+    max_length: 256
+    device: null  # null = auto-detect (cuda if available)
+
+# ============================================================
 # VECTOR STORE (pluggable)
 # ============================================================
 vectorstore:
-  provider: "qdrant"  # Options: qdrant, chroma, milvus
-  
+  provider: "qdrant_hybrid"  # Options: qdrant, qdrant_hybrid, chroma
   qdrant:
     host: ${secret:QDRANT_HOST}
     port: ${secret:QDRANT_PORT}
     collection_name: "documents"
     distance_metric: "cosine"
+  qdrant_hybrid:
+    host: ${secret:QDRANT_HOST}
+    port: ${secret:QDRANT_PORT}
+    collection_name: "hybrid_documents"
+    distance_metric: "cosine"
 
 # ============================================================
-# RETRIEVAL
+# RETRIEVAL (two-stage: retrieve then rerank)
 # ============================================================
 retrieval:
   search_type: "hybrid"  # Options: dense, sparse, hybrid
-  top_k: 5
-  score_threshold: 0.7
   
-  reranker:
+  # Stage 1: Initial retrieval (high recall)
+  retrieval_top_k: 20  # Candidates to retrieve
+  score_threshold: null  # Optional minimum score
+  
+  # Stage 2: Reranking (high precision)
+  reranking:
     enabled: true
-    provider: "bge"
-    model: "bge-reranker-base"
-    top_n: 3
+    provider: "cross_encoder"  # Options: cross_encoder, bge
+    cross_encoder:
+      model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+      device: null
+    bge:
+      model: "base"  # Options: base, large, v2-m3 (multilingual)
+      device: null
+    top_n: 5  # Final results after reranking
 
 # ============================================================
 # LLM (pluggable)
 # ============================================================
 llm:
   provider: "ollama"  # Options: ollama, openai, anthropic
-  
   ollama:
     host: ${secret:OLLAMA_HOST}
     model: ${secret:LLM_MODEL}
     temperature: 0.1
     max_tokens: 1024
-  
   openai:
     api_key: ${secret:OPENAI_API_KEY}
     model: "gpt-4o-mini"
     temperature: 0.1
     max_tokens: 1024
-
   system_prompt: |
     You are a helpful assistant that answers questions based on the provided context.
     Always cite the source of your information.
     If the context doesn't contain the answer, say "I don't have enough information to answer this."
+
+# ============================================================
+# GUARDRAILS
+# ============================================================
+guardrails:
+  input:
+    max_length: 1000
+    blocked_patterns: []
+  output:
+    require_citation: true
+    max_length: 2000
 
 # ============================================================
 # EVALUATION (RAGAS)
@@ -110,3 +137,4 @@ evaluation:
     - answer_relevancy
     - context_precision
     - context_recall
+  test_dataset: "./data/eval/test_questions.json"

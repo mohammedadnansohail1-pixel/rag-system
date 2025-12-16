@@ -45,3 +45,4 @@ models/
 
 # Jupyter
 .ipynb_checkpoints/
+rag-env/
