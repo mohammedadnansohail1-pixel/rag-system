@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+*.egg
+.pytest_cache
+.coverage
+htmlcov
+.mypy_cache
+.ruff_cache
+
+# Virtual environments
+venv
+.venv
+rag-env
+env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Data (mount as volume instead)
+data/books
+data/sample
+*.pdf
+
+# Tests
+tests
+
+# Misc
+*.md
+*.txt
+!requirements.txt
