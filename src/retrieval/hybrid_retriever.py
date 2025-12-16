@@ -1,10 +1,13 @@
 """Hybrid retriever combining dense and sparse search."""
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 from src.retrieval.base import BaseRetriever, RetrievalResult
 from src.retrieval.factory import register_retriever
-from src.retrieval.sparse_encoder import SpladeEncoder
+from src.retrieval.sparse_encoder import (
+    BaseSparseEncoder,
+    SparseEncoderFactory,
+)
 from src.core.types import SparseVector
 from src.embeddings.base import BaseEmbeddings
 from src.vectorstores.qdrant_hybrid_store import QdrantHybridStore
@@ -16,59 +19,96 @@ logger = logging.getLogger(__name__)
 class HybridRetriever(BaseRetriever):
     """
     Hybrid retriever combining dense (semantic) and sparse (lexical) search.
-    
+
     Uses:
     - Dense embeddings (Ollama/sentence-transformers) for semantic similarity
-    - SPLADE sparse vectors for keyword/lexical matching
+    - Sparse vectors (BM25/SPLADE/TFIDF) for keyword/lexical matching
     - RRF (Reciprocal Rank Fusion) to combine results
-    
-    Benefits over dense-only:
-    - Better recall for keyword-heavy queries
-    - Handles rare terms that embeddings miss
-    - More robust across query types
-    
+
+    Sparse encoder options:
+    - 'bm25': CPU-only, scales infinitely, production standard
+    - 'tfidf': CPU-only, lightweight baseline
+    - 'splade': GPU, best quality, higher resources
+
     Usage:
+        # With BM25 (default, production-ready)
         retriever = HybridRetriever(
             embeddings=ollama_embeddings,
             vectorstore=qdrant_hybrid_store,
+            sparse_encoder="bm25",
         )
-        
-        # Add documents (encodes both dense and sparse)
-        retriever.add_documents(texts, metadatas)
-        
-        # Search with hybrid fusion
-        results = retriever.retrieve("kafka message ordering", top_k=10)
+
+        # With SPLADE (if you have GPU resources)
+        retriever = HybridRetriever(
+            embeddings=ollama_embeddings,
+            vectorstore=qdrant_hybrid_store,
+            sparse_encoder="splade",
+        )
+
+        # From config
+        retriever = HybridRetriever(
+            embeddings=ollama_embeddings,
+            vectorstore=qdrant_hybrid_store,
+            sparse_encoder={"type": "bm25", "k1": 1.5, "b": 0.75},
+        )
     """
-    
+
     def __init__(
         self,
         embeddings: BaseEmbeddings,
         vectorstore: QdrantHybridStore,
-        sparse_encoder: Optional[SpladeEncoder] = None,
+        sparse_encoder: Union[str, Dict, BaseSparseEncoder, None] = "bm25",
         top_k: int = 5,
         score_threshold: Optional[float] = None,
     ):
         """
         Initialize hybrid retriever.
-        
+
         Args:
             embeddings: Dense embedding provider
             vectorstore: Hybrid vector store (must support sparse)
-            sparse_encoder: SPLADE encoder (created if not provided)
+            sparse_encoder: Sparse encoder - can be:
+                - str: encoder type ('bm25', 'tfidf', 'splade')
+                - dict: config with 'type' and encoder-specific params
+                - BaseSparseEncoder: pre-configured encoder instance
+                - None: defaults to 'bm25'
             top_k: Default number of results
             score_threshold: Minimum score filter
         """
         self.embeddings = embeddings
         self.vectorstore = vectorstore
-        self.sparse_encoder = sparse_encoder or SpladeEncoder()
         self.top_k = top_k
         self.score_threshold = score_threshold
         
+        # Initialize sparse encoder
+        self.sparse_encoder = self._init_sparse_encoder(sparse_encoder)
+        self._corpus_fitted = False
+
         logger.info(
             f"Initialized HybridRetriever: "
-            f"top_k={top_k}, score_threshold={score_threshold}"
+            f"sparse={self.sparse_encoder.__class__.__name__}, "
+            f"top_k={top_k}"
         )
-    
+
+    def _init_sparse_encoder(
+        self,
+        encoder: Union[str, Dict, BaseSparseEncoder, None]
+    ) -> BaseSparseEncoder:
+        """Initialize sparse encoder from various input types."""
+        if encoder is None:
+            return SparseEncoderFactory.create("bm25")
+        
+        if isinstance(encoder, BaseSparseEncoder):
+            return encoder
+        
+        if isinstance(encoder, str):
+            return SparseEncoderFactory.create(encoder)
+        
+        if isinstance(encoder, dict):
+            return SparseEncoderFactory.from_config(encoder)
+        
+        raise ValueError(f"Invalid sparse_encoder type: {type(encoder)}")
+
     def retrieve(
         self,
         query: str,
@@ -77,63 +117,63 @@ class HybridRetriever(BaseRetriever):
     ) -> List[RetrievalResult]:
         """
         Retrieve relevant documents.
-        
+
         Args:
             query: Search query text
             top_k: Number of results (overrides default)
             mode: Search mode ('hybrid', 'dense', 'sparse')
-            
+
         Returns:
             List of RetrievalResult objects
         """
         k = top_k or self.top_k
-        
+
         if mode == "dense":
             return self._dense_search(query, k)
         elif mode == "sparse":
             return self._sparse_search(query, k)
         else:
             return self._hybrid_search(query, k)
-    
+
     def _dense_search(self, query: str, top_k: int) -> List[RetrievalResult]:
         """Dense-only search."""
         query_embedding = self.embeddings.embed_text(query)
-        
+
         search_results = self.vectorstore.search(
             query_embedding=query_embedding,
             top_k=top_k,
             score_threshold=self.score_threshold,
         )
-        
+
         return self._convert_results(search_results)
-    
+
     def _sparse_search(self, query: str, top_k: int) -> List[RetrievalResult]:
         """Sparse-only search."""
         sparse_query = self.sparse_encoder.encode(query)
-        
+
         search_results = self.vectorstore.sparse_search(
             sparse_query=sparse_query,
             top_k=top_k,
         )
-        
+
         return self._convert_results(search_results)
-    
+
     def _hybrid_search(self, query: str, top_k: int) -> List[RetrievalResult]:
         """Hybrid search with RRF fusion."""
         # Encode query with both methods
         dense_query = self.embeddings.embed_text(query)
         sparse_query = self.sparse_encoder.encode(query)
-        
+
         # Search with fusion
         search_results = self.vectorstore.hybrid_search(
             dense_query=dense_query,
             sparse_query=sparse_query,
             top_k=top_k,
         )
-        
+
         logger.debug(f"Hybrid search returned {len(search_results)} results")
         return self._convert_results(search_results)
-    
+
     def _convert_results(self, search_results) -> List[RetrievalResult]:
         """Convert SearchResult to RetrievalResult."""
         return [
@@ -144,30 +184,38 @@ class HybridRetriever(BaseRetriever):
             )
             for sr in search_results
         ]
-    
+
     def add_documents(
         self,
         texts: List[str],
         metadatas: Optional[List[Dict[str, Any]]] = None,
+        fit_sparse: bool = True,
     ) -> List[str]:
         """
         Add documents with both dense and sparse encodings.
-        
+
         Args:
             texts: List of text content
             metadatas: Optional metadata for each text
-            
+            fit_sparse: Whether to fit sparse encoder on corpus (for BM25/TFIDF)
+
         Returns:
             List of document IDs
         """
         logger.info(f"Encoding {len(texts)} documents (dense + sparse)...")
-        
+
+        # Fit sparse encoder if needed (BM25/TFIDF need corpus statistics)
+        if fit_sparse and not self._corpus_fitted:
+            logger.info("Fitting sparse encoder on corpus...")
+            self.sparse_encoder.fit(texts)
+            self._corpus_fitted = True
+
         # Generate dense embeddings
         dense_embeddings = self.embeddings.embed_batch(texts)
-        
+
         # Generate sparse vectors
         sparse_vectors = self.sparse_encoder.encode_batch(texts)
-        
+
         # Add to hybrid store
         ids = self.vectorstore.add_hybrid(
             texts=texts,
@@ -175,10 +223,24 @@ class HybridRetriever(BaseRetriever):
             sparse_vectors=sparse_vectors,
             metadatas=metadatas,
         )
-        
+
         logger.info(f"Added {len(ids)} documents with hybrid vectors")
         return ids
-    
+
+    def fit_sparse(self, corpus: List[str]) -> None:
+        """
+        Explicitly fit sparse encoder on corpus.
+        
+        Useful when you want to fit on a larger corpus than
+        what you're indexing (e.g., fit on all docs, index subset).
+        
+        Args:
+            corpus: List of documents to fit on
+        """
+        logger.info(f"Fitting sparse encoder on {len(corpus)} documents...")
+        self.sparse_encoder.fit(corpus)
+        self._corpus_fitted = True
+
     def health_check(self) -> bool:
         """Check if retriever is operational."""
         try:
@@ -188,6 +250,7 @@ class HybridRetriever(BaseRetriever):
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return False
-    
+
     def __repr__(self) -> str:
-        return f"HybridRetriever(top_k={self.top_k})"
+        encoder_name = self.sparse_encoder.__class__.__name__
+        return f"HybridRetriever(sparse={encoder_name}, top_k={self.top_k})"
