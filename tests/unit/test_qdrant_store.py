@@ -91,7 +91,10 @@ class TestQdrantVectorStore:
         mock_result = MagicMock()
         mock_result.payload = {"content": "test content", "source": "test.txt"}
         mock_result.score = 0.95
-        mock_client.search.return_value = [mock_result]
+        
+        mock_query_response = MagicMock()
+        mock_query_response.points = [mock_result]
+        mock_client.query_points.return_value = mock_query_response
         
         mock_client_class.return_value = mock_client
 

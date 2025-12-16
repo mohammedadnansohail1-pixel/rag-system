@@ -147,19 +147,20 @@ class QdrantVectorStore(BaseVectorStore):
         Returns:
             List of SearchResult objects
         """
-        results = self._client.search(
+        results = self._client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=top_k,
             score_threshold=score_threshold,
-        )
+        ).points
         
         search_results = []
         for result in results:
-            content = result.payload.pop("content", "")
+            payload = dict(result.payload)
+            content = payload.pop("content", "")
             search_results.append(SearchResult(
                 content=content,
-                metadata=result.payload,
+                metadata=payload,
                 score=result.score
             ))
         

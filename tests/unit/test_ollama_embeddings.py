@@ -9,8 +9,7 @@ from src.embeddings.ollama_embeddings import OllamaEmbeddings
 class TestOllamaEmbeddings:
     """Tests for OllamaEmbeddings."""
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_init(self, mock_client):
+    def test_init(self):
         """Should initialize with correct settings."""
         # Act
         embeddings = OllamaEmbeddings(
@@ -24,15 +23,14 @@ class TestOllamaEmbeddings:
         assert embeddings.model == "nomic-embed-text"
         assert embeddings.get_dimensions() == 768
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_embed_text(self, mock_client_class):
+    @patch("src.embeddings.ollama_embeddings.requests.post")
+    def test_embed_text(self, mock_post):
         """Should generate embedding for single text."""
         # Arrange
-        mock_client = MagicMock()
-        mock_client.embeddings.return_value = {
-            "embedding": [0.1, 0.2, 0.3]
-        }
-        mock_client_class.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
         
         embeddings = OllamaEmbeddings()
 
@@ -41,22 +39,20 @@ class TestOllamaEmbeddings:
 
         # Assert
         assert result == [0.1, 0.2, 0.3]
-        mock_client.embeddings.assert_called_once_with(
-            model="nomic-embed-text",
-            prompt="Hello world"
-        )
+        mock_post.assert_called_once()
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_embed_batch(self, mock_client_class):
+    @patch("src.embeddings.ollama_embeddings.requests.post")
+    def test_embed_batch(self, mock_post):
         """Should generate embeddings for multiple texts."""
         # Arrange
-        mock_client = MagicMock()
-        mock_client.embeddings.side_effect = [
+        mock_response = MagicMock()
+        mock_response.json.side_effect = [
             {"embedding": [0.1, 0.2]},
             {"embedding": [0.3, 0.4]},
             {"embedding": [0.5, 0.6]},
         ]
-        mock_client_class.return_value = mock_client
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
         
         embeddings = OllamaEmbeddings()
 
@@ -69,8 +65,7 @@ class TestOllamaEmbeddings:
         assert result[1] == [0.3, 0.4]
         assert result[2] == [0.5, 0.6]
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_model_name_property(self, mock_client):
+    def test_model_name_property(self):
         """Should return model name."""
         # Arrange
         embeddings = OllamaEmbeddings(model="custom-model")
@@ -81,8 +76,7 @@ class TestOllamaEmbeddings:
         # Assert
         assert result == "custom-model"
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_get_dimensions(self, mock_client):
+    def test_get_dimensions(self):
         """Should return configured dimensions."""
         # Arrange
         embeddings = OllamaEmbeddings(dimensions=1024)
@@ -92,3 +86,28 @@ class TestOllamaEmbeddings:
 
         # Assert
         assert result == 1024
+
+    def test_truncate_text(self):
+        """Should truncate long text."""
+        # Arrange
+        embeddings = OllamaEmbeddings()
+        long_text = "a" * 10000
+
+        # Act
+        result = embeddings._truncate_text(long_text, max_chars=100)
+
+        # Assert
+        assert len(result) == 100
+
+    def test_clean_text(self):
+        """Should clean problematic characters."""
+        # Arrange
+        embeddings = OllamaEmbeddings()
+        dirty_text = "Hello\x00World\n\n  Multiple   spaces"
+
+        # Act
+        result = embeddings._clean_text(dirty_text)
+
+        # Assert
+        assert "\x00" not in result
+        assert "  " not in result

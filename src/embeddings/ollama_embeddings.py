@@ -1,9 +1,9 @@
 """Ollama embedding provider."""
 
 import logging
-from typing import List
-
-import ollama
+import time
+import requests
+from typing import List, Optional
 
 from src.embeddings.base import BaseEmbeddings
 from src.embeddings.factory import register_embeddings
@@ -29,19 +29,35 @@ class OllamaEmbeddings(BaseEmbeddings):
         host: str = "http://localhost:11434",
         model: str = "nomic-embed-text",
         dimensions: int = 768,
+        max_retries: int = 3,
     ):
         """
         Args:
             host: Ollama server URL
             model: Embedding model name
             dimensions: Expected embedding dimensions
+            max_retries: Number of retries on failure
         """
-        self.host = host
+        self.host = host.rstrip("/")
         self.model = model
         self._dimensions = dimensions
-        self._client = ollama.Client(host=host)
+        self.max_retries = max_retries
         
         logger.info(f"Initialized OllamaEmbeddings: model={model}, host={host}")
+
+    def _truncate_text(self, text: str, max_chars: int = 4000) -> str:
+        """Truncate text to avoid token limits."""
+        if len(text) > max_chars:
+            return text[:max_chars]
+        return text
+
+    def _clean_text(self, text: str) -> str:
+        """Clean text of problematic characters."""
+        # Remove null bytes and other problematic chars
+        text = text.replace('\x00', '')
+        # Normalize whitespace
+        text = ' '.join(text.split())
+        return text
 
     def embed_text(self, text: str) -> List[float]:
         """
@@ -53,30 +69,65 @@ class OllamaEmbeddings(BaseEmbeddings):
         Returns:
             Embedding vector
         """
-        response = self._client.embeddings(
-            model=self.model,
-            prompt=text
-        )
+        text = self._clean_text(text)
+        text = self._truncate_text(text)
+        url = f"{self.host}/api/embeddings"
         
-        return response["embedding"]
+        for attempt in range(self.max_retries):
+            try:
+                response = requests.post(
+                    url,
+                    json={"model": self.model, "prompt": text},
+                    timeout=120
+                )
+                response.raise_for_status()
+                return response.json()["embedding"]
+            except Exception as e:
+                logger.warning(f"Embedding attempt {attempt + 1} failed: {e}")
+                if attempt < self.max_retries - 1:
+                    time.sleep(2)  # Longer wait
+                else:
+                    raise
 
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def embed_batch(
+        self, 
+        texts: List[str],
+        skip_errors: bool = True
+    ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts.
         
         Args:
             texts: List of texts to embed
+            skip_errors: If True, use zero vector for failed embeddings
             
         Returns:
             List of embedding vectors
         """
         embeddings = []
+        total = len(texts)
+        failed = 0
         
-        for text in texts:
-            embedding = self.embed_text(text)
-            embeddings.append(embedding)
+        for i, text in enumerate(texts):
+            if (i + 1) % 20 == 0 or i == 0:
+                print(f"  Embedding progress: {i + 1}/{total}")
+            
+            try:
+                embedding = self.embed_text(text)
+                embeddings.append(embedding)
+            except Exception as e:
+                failed += 1
+                if skip_errors:
+                    # Use zero vector as placeholder
+                    embeddings.append([0.0] * self._dimensions)
+                    logger.warning(f"Skipped chunk {i}: {e}")
+                else:
+                    raise
         
-        logger.debug(f"Generated {len(embeddings)} embeddings")
+        if failed > 0:
+            print(f"  Warning: {failed} chunks failed embedding")
+        
+        logger.debug(f"Generated {len(embeddings)} embeddings ({failed} failed)")
         return embeddings
 
     def get_dimensions(self) -> int:

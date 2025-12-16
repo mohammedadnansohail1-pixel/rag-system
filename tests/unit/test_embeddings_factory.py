@@ -18,8 +18,7 @@ class TestEmbeddingsFactory:
         # Assert
         assert "ollama" in providers
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_create_ollama_embeddings(self, mock_client):
+    def test_create_ollama_embeddings(self):
         """Should create OllamaEmbeddings."""
         # Act
         embeddings = EmbeddingsFactory.create(
@@ -40,8 +39,7 @@ class TestEmbeddingsFactory:
 
         assert "Unknown embeddings provider" in str(exc_info.value)
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_from_config(self, mock_client):
+    def test_from_config(self):
         """Should create embeddings from config dict."""
         # Arrange
         config = {
@@ -60,8 +58,7 @@ class TestEmbeddingsFactory:
         assert isinstance(embeddings, OllamaEmbeddings)
         assert embeddings.get_dimensions() == 768
 
-    @patch("src.embeddings.ollama_embeddings.ollama.Client")
-    def test_from_config_defaults(self, mock_client):
+    def test_from_config_defaults(self):
         """Should use defaults when config is minimal."""
         # Act
         embeddings = EmbeddingsFactory.from_config({})
