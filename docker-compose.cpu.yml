@@ -1,6 +1,5 @@
 version: '3.8'
 
-# CPU-only version (no GPU requirements)
 services:
   # Qdrant Vector Database
   qdrant:
@@ -11,13 +10,9 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
 
-  # Ollama LLM Server (CPU)
+  # Ollama LLM Server (CPU only)
   ollama:
     image: ollama/ollama:latest
     container_name: rag-ollama
@@ -25,29 +20,7 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Model Initialization
-  ollama-init:
-    image: ollama/ollama:latest
-    container_name: rag-ollama-init
-    depends_on:
-      ollama:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        echo "Pulling embedding model..."
-        ollama pull nomic-embed-text
-        echo "Pulling LLM model..."
-        ollama pull llama3.2:latest
-        echo "Models ready!"
-    environment:
-      - OLLAMA_HOST=http://ollama:11434
+    restart: unless-stopped
 
   # RAG API Service
   rag-api:
@@ -55,37 +28,33 @@ services:
     container_name: rag-api
     ports:
       - "8000:8000"
-    volumes:
-      - ./data:/app/data
-      - ./config:/app/config
     environment:
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=llama3.2:latest
-      - EMBEDDING_MODEL=nomic-embed-text
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - OLLAMA_MODEL=llama3.2:latest
+      - EMBEDDING_MODEL=nomic-embed-text
       - COLLECTION_NAME=rag_production
-      - EMBEDDING_DIMENSIONS=768
-      - SCORE_THRESHOLD=0.4
-      - MIN_SOURCES=2
-      - MIN_AVG_SCORE=0.5
     depends_on:
-      qdrant:
-        condition: service_healthy
-      ollama:
-        condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - qdrant
+      - ollama
+    restart: unless-stopped
+
+  # Streamlit UI
+  rag-ui:
+    build: .
+    container_name: rag-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    depends_on:
+      - rag-api
+    command: ["streamlit", "run", "src/ui/app.py", "--server.address", "0.0.0.0"]
+    restart: unless-stopped
 
 volumes:
   qdrant_data:
   ollama_data:
-
-networks:
-  default:
-    name: rag-network

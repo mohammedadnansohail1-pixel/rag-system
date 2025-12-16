@@ -1,56 +1,65 @@
-# Production RAG System
+# 🔍 Enterprise RAG System
 
-A production-ready Retrieval-Augmented Generation (RAG) system with modular architecture, guardrails, and comprehensive evaluation.
+Production-ready Retrieval-Augmented Generation system with guardrails, built with Python.
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
-![Tests](https://img.shields.io/badge/Tests-171%20passing-green)
+![Tests](https://img.shields.io/badge/Tests-172%20passing-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## Features
+## ✨ Features
 
-- **Modular Architecture**: Pluggable components with registry pattern
-- **Production Guardrails**: Score thresholds, source validation, confidence levels
-- **Multiple Loaders**: PDF, TXT, Markdown support
-- **Chunking Strategies**: Fixed-size and recursive chunking
-- **Local LLM**: Ollama integration (Llama 3.2, nomic-embed-text)
-- **Vector Store**: Qdrant for similarity search
-- **REST API**: FastAPI with full OpenAPI documentation
-- **Evaluation**: Built-in metrics for RAG quality assessment
-- **Docker Ready**: One-command deployment
+- **Modular Architecture** - Pluggable loaders, chunkers, embeddings, vectorstores
+- **Production Guardrails** - Score thresholds, source validation, confidence levels
+- **Multiple Interfaces** - REST API (FastAPI) + Web UI (Streamlit)
+- **RAGAS-style Evaluation** - Faithfulness, relevance, context precision metrics
+- **Docker Ready** - One-command deployment with GPU support
 
-## Architecture
+## 🏗️ Architecture
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │   Loaders   │────▶│  Chunkers   │────▶│ Embeddings  │
-│ (PDF/TXT/MD)│     │(Fixed/Recur)│     │  (Ollama)   │
-└─────────────┘     └─────────────┘     └──────┬──────┘
+│ PDF/TXT/MD  │     │Fixed/Recurs │     │   Ollama    │
+└─────────────┘     └─────────────┘     └─────────────┘
                                                │
-┌─────────────┐     ┌─────────────┐     ┌──────▼──────┐
-│     LLM     │◀────│  Retriever  │◀────│ VectorStore │
-│  (Ollama)   │     │   (Dense)   │     │  (Qdrant)   │
-└──────┬──────┘     └─────────────┘     └─────────────┘
+                                               ▼
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│     LLM     │◀────│  Retrieval  │◀────│ VectorStore │
+│   Ollama    │     │    Dense    │     │   Qdrant    │
+└─────────────┘     └─────────────┘     └─────────────┘
        │
-┌──────▼──────┐     ┌─────────────┐
-│ Guardrails  │────▶│  Response   │
-│ (Validation)│     │ + Confidence│
-└─────────────┘     └─────────────┘
+       ▼
+┌─────────────┐
+│ Guardrails  │──▶ Confidence: 🟢 HIGH | 🟡 MEDIUM | 🔴 LOW
+└─────────────┘
 ```
 
-## Quick Start
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.12+
+- Docker & Docker Compose
+- Ollama installed locally
 
 ### Option 1: Docker (Recommended)
 ```bash
-# GPU support
+# GPU systems
 docker-compose up -d
 
 # CPU only
 docker-compose -f docker-compose.cpu.yml up -d
 
-# Access API
-curl http://localhost:8000/health
+# Pull required models
+docker exec rag-ollama ollama pull llama3.2:latest
+docker exec rag-ollama ollama pull nomic-embed-text
 ```
 
-### Option 2: Local Setup
+Access:
+- API: http://localhost:8000
+- UI: http://localhost:8501
+- API Docs: http://localhost:8000/docs
+
+### Option 2: Local Development
 ```bash
 # Clone repository
 git clone https://github.com/yourusername/rag-system.git
@@ -58,40 +67,25 @@ cd rag-system
 
 # Create virtual environment
 python -m venv rag-env
-source rag-env/bin/activate  # Linux/Mac
-# or: rag-env\Scripts\activate  # Windows
+source rag-env/bin/activate  # Windows: rag-env\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Start Qdrant
-docker run -d -p 6333:6333 qdrant/qdrant
-
-# Pull Ollama models
-ollama pull nomic-embed-text
+# Start services
+docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
+ollama serve &
 ollama pull llama3.2:latest
+ollama pull nomic-embed-text
 
 # Run API
-make run
+uvicorn src.api.main:app --reload
+
+# Or run UI
+streamlit run src/ui/app.py
 ```
 
-## Usage
-
-### REST API
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Ingest documents
-curl -X POST http://localhost:8000/ingest/directory \
-  -H "Content-Type: application/json" \
-  -d '{"directory": "data/documents", "file_types": [".pdf", ".txt"]}'
-
-# Query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is gradient descent?"}'
-```
+## 📖 Usage
 
 ### Python SDK
 ```python
@@ -100,6 +94,7 @@ from src.embeddings import OllamaEmbeddings
 from src.vectorstores import QdrantVectorStore
 from src.retrieval import DenseRetriever
 from src.generation import OllamaLLM
+from src.guardrails import GuardrailsConfig
 
 # Initialize components
 embeddings = OllamaEmbeddings(model="nomic-embed-text")
@@ -107,142 +102,131 @@ vectorstore = QdrantVectorStore(collection_name="my_docs")
 retriever = DenseRetriever(embeddings=embeddings, vectorstore=vectorstore)
 llm = OllamaLLM(model="llama3.2:latest")
 
-# Create pipeline
+# Create pipeline with guardrails
 pipeline = ProductionRAGPipeline(
     embeddings=embeddings,
     vectorstore=vectorstore,
     retriever=retriever,
-    llm=llm
+    llm=llm,
+    guardrails_config=GuardrailsConfig(
+        score_threshold=0.4,
+        min_sources=2,
+        min_avg_score=0.5,
+    )
 )
 
 # Ingest documents
-pipeline.ingest_directory("data/documents")
+pipeline.ingest_directory("./documents", file_types=[".pdf", ".txt"])
 
-# Query with guardrails
+# Query with confidence
 response = pipeline.query("What is machine learning?")
-
-print(f"{response.confidence_emoji} Confidence: {response.confidence}")
+print(f"{response.confidence_emoji} {response.confidence}")
 print(f"Answer: {response.answer}")
 print(f"Sources: {len(response.sources)}")
 ```
 
-## Guardrails
+### REST API
+```bash
+# Health check
+curl http://localhost:8000/health
 
-The system includes production guardrails to prevent hallucination:
+# Ingest file
+curl -X POST http://localhost:8000/ingest/file \
+  -H "Content-Type: application/json" \
+  -d '{"file_path": "data/sample/document.pdf"}'
 
-| Guardrail | Default | Description |
-|-----------|---------|-------------|
-| `score_threshold` | 0.4 | Minimum retrieval score |
-| `min_sources` | 2 | Required quality sources |
-| `min_avg_score` | 0.5 | Minimum average relevance |
+# Query
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is gradient descent?", "top_k": 5}'
+```
 
-### Confidence Levels
+## 🛡️ Guardrails
 
-- 🟢 **HIGH**: 3+ sources with avg score > 0.7
-- 🟡 **MEDIUM**: 2+ sources with avg score > 0.5
-- 🔴 **LOW**: Insufficient sources or relevance
+The system prevents hallucinations with multiple layers:
 
-## Project Structure
+| Guard | Default | Description |
+|-------|---------|-------------|
+| Score Threshold | 0.4 | Min similarity score for chunks |
+| Min Sources | 2 | Required quality sources |
+| Min Avg Score | 0.5 | Average relevance threshold |
+
+Response confidence levels:
+- 🟢 **HIGH**: 3+ sources, avg score ≥ 0.7
+- 🟡 **MEDIUM**: 2+ sources, avg score ≥ 0.5
+- 🔴 **LOW**: Below thresholds (returns uncertainty)
+
+## 📊 Evaluation
+```python
+from src.evaluation import RAGEvaluator
+
+evaluator = RAGEvaluator(llm)
+result = evaluator.evaluate(
+    query="What is ML?",
+    answer="Machine learning is...",
+    contexts=["ML is a subset of AI..."]
+)
+
+print(f"Faithfulness: {result.faithfulness:.2f}")
+print(f"Relevance: {result.relevance:.2f}")
+print(f"Overall: {result.overall_score:.2f}")
+```
+
+## 🧪 Testing
+```bash
+# Run all tests
+python -m pytest tests/unit/ -v
+
+# Run with coverage
+python -m pytest tests/unit/ --cov=src --cov-report=html
+```
+
+## 📁 Project Structure
 ```
 rag-system/
 ├── src/
-│   ├── api/           # FastAPI REST API
-│   ├── core/          # Config and secrets management
-│   ├── loaders/       # Document loaders (PDF, TXT, MD)
-│   ├── chunkers/      # Text chunking strategies
-│   ├── embeddings/    # Embedding providers
-│   ├── vectorstores/  # Vector databases
-│   ├── retrieval/     # Retrieval strategies
-│   ├── generation/    # LLM providers
-│   ├── guardrails/    # Production safety
-│   ├── pipeline/      # RAG orchestration
-│   └── evaluation/    # Quality metrics
+│   ├── core/           # Config, secrets management
+│   ├── loaders/        # PDF, TXT, MD loaders
+│   ├── chunkers/       # Fixed, recursive chunkers
+│   ├── embeddings/     # Ollama embeddings
+│   ├── vectorstores/   # Qdrant integration
+│   ├── retrieval/      # Dense retriever
+│   ├── generation/     # Ollama LLM
+│   ├── guardrails/     # Production safety
+│   ├── pipeline/       # RAG orchestration
+│   ├── evaluation/     # RAGAS metrics
+│   ├── api/            # FastAPI endpoints
+│   └── ui/             # Streamlit interface
 ├── tests/
-│   └── unit/          # 171 unit tests
-├── config/            # YAML configuration
-├── scripts/           # Demo scripts
-├── docker-compose.yml # Docker deployment
-└── Makefile          # Common commands
+├── config/
+├── data/
+├── docker-compose.yml
+└── requirements.txt
 ```
 
-## Configuration
+## 🔧 Configuration
 
 Environment variables:
 ```bash
-# Ollama
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=llama3.2:latest
 EMBEDDING_MODEL=nomic-embed-text
-
-# Qdrant
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 COLLECTION_NAME=rag_production
-
-# Guardrails
 SCORE_THRESHOLD=0.4
 MIN_SOURCES=2
 MIN_AVG_SCORE=0.5
 ```
 
-## Evaluation
-```python
-from src.evaluation import RAGEvaluator
+## 📝 License
 
-evaluator = RAGEvaluator(pipeline)
+MIT License - see [LICENSE](LICENSE) for details.
 
-# Single query evaluation
-result = evaluator.evaluate_query("What is ML?")
-print(f"Overall: {result.overall_score:.2f}")
-print(f"Faithfulness: {result.faithfulness:.2f}")
+## 🙏 Acknowledgments
 
-# Batch evaluation
-results = evaluator.evaluate_batch([
-    {"query": "What is gradient descent?"},
-    {"query": "Explain neural networks"},
-])
-print(f"Average score: {results.avg_overall:.2f}")
-```
-
-## Testing
-```bash
-# Run all tests
-make test
-
-# Run with coverage
-pytest tests/unit/ --cov=src --cov-report=html
-```
-
-## Commands
-```bash
-make help          # Show all commands
-make install       # Install dependencies
-make test          # Run tests
-make run           # Start API locally
-make demo          # Run interactive demo
-make docker-up     # Start with Docker (GPU)
-make docker-up-cpu # Start with Docker (CPU)
-make docker-down   # Stop Docker services
-```
-
-## Tech Stack
-
-- **Framework**: FastAPI
-- **LLM**: Ollama (Llama 3.2)
-- **Embeddings**: nomic-embed-text
-- **Vector DB**: Qdrant
-- **Testing**: pytest (171 tests)
-- **Containerization**: Docker
-
-## License
-
-MIT License
-
-## Author
-
-Built as a production-grade RAG system demonstrating:
-- Modular software architecture
-- Registry pattern for extensibility
-- Production guardrails for reliability
-- Comprehensive testing practices
-- Docker deployment readiness
+- [Ollama](https://ollama.ai/) - Local LLM inference
+- [Qdrant](https://qdrant.tech/) - Vector database
+- [FastAPI](https://fastapi.tiangolo.com/) - API framework
+- [Streamlit](https://streamlit.io/) - Web UI
+- [RAGAS](https://github.com/explodinggradients/ragas) - Evaluation inspiration

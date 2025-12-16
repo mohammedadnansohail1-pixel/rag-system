@@ -1,41 +1,32 @@
+# Virtual environment
+rag-env/
+.venv/
+venv/
+
 # Git
-.git
+.git/
 .gitignore
 
-# Python
-__pycache__
+# Python cache
+__pycache__/
 *.pyc
 *.pyo
-*.egg-info
-.eggs
-*.egg
-.pytest_cache
-.coverage
-htmlcov
-.mypy_cache
-.ruff_cache
-
-# Virtual environments
-venv
-.venv
-rag-env
-env
+.pytest_cache/
 
 # IDE
-.idea
-.vscode
-*.swp
-*.swo
-
-# Data (mount as volume instead)
-data/books
-data/sample
-*.pdf
+.vscode/
+.idea/
 
 # Tests
-tests
+tests/
 
-# Misc
+# Docs
 *.md
-*.txt
-!requirements.txt
+!README.md
+
+# Local data
+data/books/
+
+# Environment files
+.env
+.env.local
