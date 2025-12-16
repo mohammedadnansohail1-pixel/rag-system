@@ -6,10 +6,12 @@ from typing import List
 
 from src.loaders.base import BaseLoader, Document
 from src.loaders.exceptions import LoaderError
+from src.loaders.factory import register_loader
 
 logger = logging.getLogger(__name__)
 
 
+@register_loader("txt")
 class TextLoader(BaseLoader):
     """
     Loads plain text files (.txt).

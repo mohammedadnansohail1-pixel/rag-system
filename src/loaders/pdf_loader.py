@@ -8,10 +8,12 @@ from pypdf import PdfReader
 
 from src.loaders.base import BaseLoader, Document
 from src.loaders.exceptions import LoaderError
+from src.loaders.factory import register_loader
 
 logger = logging.getLogger(__name__)
 
 
+@register_loader("pdf")
 class PDFLoader(BaseLoader):
     """
     Loads PDF files (.pdf).

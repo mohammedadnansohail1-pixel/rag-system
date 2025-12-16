@@ -1,16 +1,39 @@
-"""Factory for creating document loaders based on config or file type."""
+"""Factory for creating document loaders with registry pattern."""
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Callable
 
 from src.loaders.base import BaseLoader, Document
 from src.loaders.exceptions import UnsupportedFileTypeError
-from src.loaders.text_loader import TextLoader
-from src.loaders.markdown_loader import MarkdownLoader
-from src.loaders.pdf_loader import PDFLoader
 
 logger = logging.getLogger(__name__)
+
+# Registry to hold loader classes
+_LOADER_REGISTRY: Dict[str, Type[BaseLoader]] = {}
+
+
+def register_loader(name: str) -> Callable:
+    """
+    Decorator to register a loader class.
+    
+    Usage:
+        @register_loader("pdf")
+        class PDFLoader(BaseLoader):
+            ...
+    """
+    def decorator(cls: Type[BaseLoader]) -> Type[BaseLoader]:
+        if name in _LOADER_REGISTRY:
+            logger.warning(f"Overwriting existing loader: {name}")
+        _LOADER_REGISTRY[name] = cls
+        logger.debug(f"Registered loader: {name} -> {cls.__name__}")
+        return cls
+    return decorator
+
+
+def get_registered_loaders() -> List[str]:
+    """Return list of registered loader names."""
+    return list(_LOADER_REGISTRY.keys())
 
 
 class LoaderFactory:
@@ -26,17 +49,18 @@ class LoaderFactory:
     """
 
     def __init__(self):
-        """Initialize with default loaders."""
-        self._loaders: List[BaseLoader] = [
-            TextLoader(),
-            MarkdownLoader(),
-            PDFLoader(),
-        ]
+        """Initialize with registered loaders."""
+        self._loaders: List[BaseLoader] = []
+        
+        # Instantiate all registered loaders
+        for name, loader_class in _LOADER_REGISTRY.items():
+            self._loaders.append(loader_class())
+            logger.debug(f"Initialized loader: {name}")
 
     def register_loader(self, loader: BaseLoader) -> None:
-        """Add a custom loader."""
+        """Add a custom loader instance at runtime."""
         self._loaders.append(loader)
-        logger.info(f"Registered loader: {loader.__class__.__name__}")
+        logger.info(f"Registered runtime loader: {loader.__class__.__name__}")
 
     def get_loader(self, file_path: Path) -> BaseLoader:
         """
@@ -114,6 +138,7 @@ class LoaderFactory:
                 loader = self.get_loader(file_path)
                 docs = loader.load(file_path)
                 documents.extend(docs)
+                logger.debug(f"Loaded {len(docs)} docs from {file_path}")
             except UnsupportedFileTypeError:
                 logger.debug(f"Skipping unsupported file: {file_path}")
                 continue
