@@ -8,12 +8,15 @@ from src.loaders.factory import (
 )
 
 # Import loaders to trigger registration
-from src.loaders.text_loader import TextLoader
-from src.loaders.markdown_loader import MarkdownLoader
-from src.loaders.pdf_loader import PDFLoader
-from src.loaders.google_drive_loader import GoogleDriveLoader
+# Content-aware loaders first (they check file content, not just extension)
 from src.loaders.sec_loader import SECLoader
 from src.loaders.web_loader import WebLoader, CrawlConfig
+
+# Extension-based loaders
+from src.loaders.pdf_loader import PDFLoader
+from src.loaders.markdown_loader import MarkdownLoader
+from src.loaders.google_drive_loader import GoogleDriveLoader
+from src.loaders.text_loader import TextLoader  # Fallback for .txt
 
 __all__ = [
     "BaseLoader",

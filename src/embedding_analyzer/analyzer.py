@@ -14,6 +14,7 @@ from src.embedding_analyzer.analyzers.text_quality import TextQualityAnalyzer
 from src.embedding_analyzer.analyzers.token_analysis import TokenAnalyzer
 from src.embedding_analyzer.analyzers.structural import StructuralAnalyzer
 from src.embedding_analyzer.analyzers.semantic import SemanticAnalyzer
+from src.embedding_analyzer.analyzers.content_type import ContentTypeAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,7 @@ class EmbeddingAnalyzer:
         tq_config = analyzer_configs.get("text_quality", {})
         if tq_config.get("enabled", True):
             analyzers.append(TextQualityAnalyzer(
-                weight=tq_config.get("weight", 0.25),
+                weight=tq_config.get("weight", 0.20),
                 config=tq_config.get("thresholds", {}),
             ))
 
@@ -92,7 +93,7 @@ class EmbeddingAnalyzer:
         ta_config = analyzer_configs.get("token_analysis", {})
         if ta_config.get("enabled", True):
             analyzers.append(TokenAnalyzer(
-                weight=ta_config.get("weight", 0.25),
+                weight=ta_config.get("weight", 0.20),
                 config=ta_config.get("thresholds", {}),
             ))
 
@@ -100,8 +101,16 @@ class EmbeddingAnalyzer:
         st_config = analyzer_configs.get("structural", {})
         if st_config.get("enabled", True):
             analyzers.append(StructuralAnalyzer(
-                weight=st_config.get("weight", 0.25),
+                weight=st_config.get("weight", 0.20),
                 config=st_config.get("thresholds", {}),
+            ))
+
+        # Content Type Analyzer
+        ct_config = analyzer_configs.get("content_type", {})
+        if ct_config.get("enabled", True):
+            analyzers.append(ContentTypeAnalyzer(
+                weight=ct_config.get("weight", 0.15),
+                config=ct_config.get("thresholds", {}),
             ))
 
         # Semantic Analyzer
@@ -205,13 +214,14 @@ class EmbeddingAnalyzer:
             except Exception as e:
                 logger.error(f"Analyzer {analyzer.name} failed: {e}")
                 # Create error result
+                from src.embedding_analyzer.models import IssueCategory
                 analyzer_results.append(AnalyzerResult(
                     analyzer_name=analyzer.name,
                     passed=False,
                     score=0.0,
                     issues=[Issue(
                         severity=Severity.CRITICAL,
-                        category=result.issues[0].category if result.issues else "content",
+                        category=IssueCategory.CONTENT,
                         code="ANALYZER_ERROR",
                         message=f"Analyzer failed: {str(e)[:100]}",
                     )],
