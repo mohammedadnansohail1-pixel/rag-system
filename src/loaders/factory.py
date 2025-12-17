@@ -56,6 +56,9 @@ class LoaderFactory:
 
         # Or load entire directory
         docs = LoaderFactory.load_directory(Path("./data/raw"))
+        
+        # Load with section extraction (for SEC filings)
+        docs = LoaderFactory.load(Path("10k.txt"), use_sections=True)
     """
 
     @classmethod
@@ -74,7 +77,7 @@ class LoaderFactory:
         """
         file_path = Path(file_path)
         loaders = _get_loader_instances()
-        
+
         for loader in loaders:
             if loader.can_load(file_path):
                 return loader
@@ -84,19 +87,32 @@ class LoaderFactory:
         )
 
     @classmethod
-    def load(cls, file_path: Path) -> List[Document]:
+    def load(
+        cls, 
+        file_path: Path, 
+        use_sections: bool = False,
+    ) -> List[Document]:
         """
         Load a single file.
 
         Args:
             file_path: Path to file
+            use_sections: If True, extract sections (for supported loaders like SEC)
 
         Returns:
             List of Documents
         """
         file_path = Path(file_path)
         loader = cls.get_loader(file_path)
-        logger.info(f"Loading {file_path} with {loader.__class__.__name__}")
+        loader_name = loader.__class__.__name__
+        
+        logger.info(f"Loading {file_path} with {loader_name}")
+        
+        # Use section extraction if requested and supported
+        if use_sections and hasattr(loader, 'load_with_sections'):
+            logger.info(f"Using section extraction for {file_path}")
+            return loader.load_with_sections(str(file_path))
+        
         return loader.load(file_path)
 
     @classmethod
@@ -104,7 +120,8 @@ class LoaderFactory:
         cls,
         directory: Path,
         recursive: bool = True,
-        file_types: Optional[List[str]] = None
+        file_types: Optional[List[str]] = None,
+        use_sections: bool = False,
     ) -> List[Document]:
         """
         Load all supported files from directory.
@@ -113,6 +130,7 @@ class LoaderFactory:
             directory: Path to directory
             recursive: Search subdirectories
             file_types: Filter by extensions (e.g., ['.pdf', '.md'])
+            use_sections: If True, extract sections (for supported loaders)
 
         Returns:
             List of all Documents
@@ -137,8 +155,7 @@ class LoaderFactory:
                 continue
 
             try:
-                loader = cls.get_loader(file_path)
-                docs = loader.load(file_path)
+                docs = cls.load(file_path, use_sections=use_sections)
                 documents.extend(docs)
                 logger.debug(f"Loaded {len(docs)} docs from {file_path}")
             except UnsupportedFileTypeError:
