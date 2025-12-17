@@ -2,7 +2,7 @@
 import re
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from html.parser import HTMLParser
 
 from src.loaders.base import BaseLoader, Document
@@ -21,7 +21,7 @@ class HTMLTextExtractor(HTMLParser):
         self.current_skip = set()
 
     def handle_starttag(self, tag, attrs):
-        if tag in self.skip_tags:
+        if tag.lower() in self.skip_tags:
             self.current_skip.add(tag)
 
     def handle_endtag(self, tag):
@@ -48,6 +48,7 @@ class SECLoader(BaseLoader):
     - Extract sections (Business, Risk Factors, MD&A, etc.)
     - Support for local files or direct download
     - Auto-detection of SEC filings by content
+    - Smart section extraction that skips Table of Contents
 
     Usage:
         loader = SECLoader()
@@ -58,20 +59,24 @@ class SECLoader(BaseLoader):
         # Load from local file
         docs = loader.load("path/to/filing.txt")
 
-        # Load with section extraction
+        # Load with section extraction (recommended)
         docs = loader.load_with_sections("path/to/filing.txt")
     """
 
-    # Common 10-K section headers (for extraction)
-    SECTION_PATTERNS = {
-        'business': r'(?:item\s*1\.?\s*business|item\s*1\b)',
-        'risk_factors': r'(?:item\s*1a\.?\s*risk\s*factors|risk\s*factors)',
-        'properties': r'(?:item\s*2\.?\s*properties)',
-        'legal_proceedings': r'(?:item\s*3\.?\s*legal\s*proceedings)',
-        'mda': r'(?:item\s*7\.?\s*management.{0,30}discussion|md&a)',
-        'financial_statements': r'(?:item\s*8\.?\s*financial\s*statements)',
-        'executive_compensation': r'(?:item\s*11\.?\s*executive\s*compensation)',
-    }
+    # Section patterns for 10-K filings
+    SECTION_PATTERNS_10K = [
+        ('business', r'Item\s+1\.?\s*Business'),
+        ('risk_factors', r'Item\s+1A\.?\s*Risk\s*Factors'),
+        ('unresolved_comments', r'Item\s+1B\.?\s*Unresolved\s*Staff\s*Comments'),
+        ('cybersecurity', r'Item\s+1C\.?\s*Cybersecurity'),
+        ('properties', r'Item\s+2\.?\s*Properties'),
+        ('legal_proceedings', r'Item\s+3\.?\s*Legal\s*Proceedings'),
+        ('market_info', r'Item\s+5\.?\s*Market\s*for'),
+        ('mda', r'Item\s+7\.?\s*Management.{0,5}s?\s*Discussion'),
+        ('market_risk', r'Item\s+7A\.?\s*Quantitative'),
+        ('financial_statements', r'Item\s+8\.?\s*Financial\s*Statements'),
+        ('controls', r'Item\s+9A\.?\s*Controls'),
+    ]
 
     # Patterns to detect SEC EDGAR filings
     SEC_SIGNATURES = [
@@ -128,56 +133,32 @@ class SECLoader(BaseLoader):
         Check if this loader can handle the given file.
         
         Uses both extension and content detection for .txt files.
-        
-        Args:
-            file_path: Path to file
-            
-        Returns:
-            True if this loader should handle the file
         """
         file_path = Path(file_path)
         ext = file_path.suffix.lower()
         
-        # Always handle .sec extension
         if ext == '.sec':
             return True
         
-        # For .txt files, check content for SEC signatures
-        if ext == '.txt':
-            return self._is_sec_filing(file_path)
-        
-        # Handle .htm/.html if they look like SEC filings
-        if ext in ('.htm', '.html'):
+        if ext in ('.txt', '.htm', '.html'):
             return self._is_sec_filing(file_path)
         
         return False
 
     def _is_sec_filing(self, file_path: Path) -> bool:
-        """
-        Detect if file is an SEC EDGAR filing by checking content.
-        
-        Args:
-            file_path: Path to file
-            
-        Returns:
-            True if file appears to be SEC filing
-        """
+        """Detect if file is an SEC EDGAR filing by checking content."""
         if not file_path.exists():
             return False
         
         try:
-            # Read first 4KB to check for signatures
             with open(file_path, 'rb') as f:
                 header = f.read(4096)
             
-            # Check for SEC signatures
             matches = sum(1 for sig in self.SEC_SIGNATURES if sig in header)
             
-            # Also check path for sec-edgar-filings pattern
             if 'sec-edgar-filings' in str(file_path).lower():
                 matches += 2
             
-            # Need at least 2 matches to be confident
             return matches >= 2
             
         except Exception as e:
@@ -207,15 +188,16 @@ class SECLoader(BaseLoader):
             'file_type': 'sec_filing',
             'char_count': len(clean_text),
         }
-
-        # Try to extract filing metadata from content
         metadata.update(self._extract_filing_metadata(content))
 
         return [Document(content=clean_text, metadata=metadata)]
 
     def load_with_sections(self, file_path: str) -> List[Document]:
         """
-        Load SEC filing and split into sections.
+        Load SEC filing and split into meaningful sections.
+        
+        Intelligently extracts actual section content, skipping
+        Table of Contents entries.
 
         Args:
             file_path: Path to filing file
@@ -225,21 +207,22 @@ class SECLoader(BaseLoader):
         """
         path = Path(file_path)
         content = path.read_text(errors='ignore')
-        clean_text = self._extract_text(content)
-
+        
+        # Get filing metadata
         base_metadata = {
             'source': str(path),
             'file_name': path.name,
             'file_type': 'sec_filing',
         }
         base_metadata.update(self._extract_filing_metadata(content))
-
-        # Extract sections
-        sections = self._extract_sections(clean_text)
-
+        
+        # Determine filing type and extract sections
+        filing_type = base_metadata.get('filing_type', '10-K')
+        sections, full_text = self._extract_sections_smart(content, filing_type)
+        
         documents = []
         for section_name, section_text in sections.items():
-            if len(section_text.strip()) > 100:  # Skip empty/tiny sections
+            if len(section_text.strip()) > 200:  # Skip tiny sections
                 doc_metadata = base_metadata.copy()
                 doc_metadata['section'] = section_name
                 doc_metadata['char_count'] = len(section_text)
@@ -248,8 +231,148 @@ class SECLoader(BaseLoader):
                     metadata=doc_metadata
                 ))
 
+        # If no sections extracted, return full document
+        if not documents:
+            logger.warning(f"No sections extracted, returning full document")
+            return self.load(file_path)
+
         logger.info(f"Extracted {len(documents)} sections from {path.name}")
         return documents
+
+    def _extract_sections_smart(
+        self, 
+        content: str, 
+        filing_type: str = "10-K"
+    ) -> Tuple[Dict[str, str], str]:
+        """
+        Extract sections from filing, intelligently skipping TOC.
+        
+        Args:
+            content: Raw filing content
+            filing_type: Type of filing (10-K, 10-Q, 8-K)
+            
+        Returns:
+            Tuple of (sections dict, full clean text)
+        """
+        # Extract main document (10-K, 10-Q, etc.)
+        main_doc = self._extract_main_document(content, filing_type)
+        
+        # Parse HTML to text
+        parser = HTMLTextExtractor()
+        try:
+            parser.feed(main_doc)
+        except Exception as e:
+            logger.warning(f"HTML parsing error: {e}")
+        
+        clean_text = parser.get_text()
+        
+        # Remove XBRL noise
+        clean_text = re.sub(r'\b\d{10}\s+\S*:\S+', '', clean_text)
+        clean_text = re.sub(r'\s+', ' ', clean_text)
+        
+        # Select patterns based on filing type
+        if '10-K' in filing_type:
+            patterns = self.SECTION_PATTERNS_10K
+        else:
+            # Default patterns work for most filings
+            patterns = self.SECTION_PATTERNS_10K
+        
+        sections = {}
+        
+        for section_name, pattern in patterns:
+            matches = list(re.finditer(pattern, clean_text, re.IGNORECASE))
+            
+            if not matches:
+                continue
+            
+            # If multiple occurrences, skip first (likely TOC)
+            if len(matches) >= 2:
+                start_idx = matches[1].start()
+            else:
+                start_idx = matches[0].start()
+            
+            # Find section end (next Item header)
+            search_start = start_idx + 100  # Skip past current header
+            next_item = re.search(
+                r'Item\s+\d+[A-C]?\.', 
+                clean_text[search_start:], 
+                re.IGNORECASE
+            )
+            
+            if next_item:
+                end_idx = search_start + next_item.start()
+            else:
+                # Cap at 100k chars if no next section
+                end_idx = min(start_idx + 100000, len(clean_text))
+            
+            section_text = clean_text[start_idx:end_idx].strip()
+            
+            # Only keep substantial sections (not TOC entries)
+            if len(section_text) > 500:
+                sections[section_name] = section_text
+        
+        return sections, clean_text
+
+    def _extract_main_document(self, content: str, doc_type: str = "10-K") -> str:
+        """Extract the main document from multi-document filing."""
+        # Find embedded documents
+        docs = re.findall(r'<DOCUMENT>(.*?)</DOCUMENT>', content, re.DOTALL)
+        
+        if not docs:
+            return content
+        
+        # Find the main filing document
+        for doc in docs:
+            type_match = re.search(rf'<TYPE>{doc_type}\s*\n', doc, re.IGNORECASE)
+            if type_match:
+                return doc
+        
+        # Fallback to first document
+        return docs[0] if docs else content
+
+    def _extract_text(self, content: str) -> str:
+        """Extract clean text from HTML/XBRL content."""
+        # Try to extract main document first
+        main_doc = self._extract_main_document(content)
+        
+        # Parse HTML
+        parser = HTMLTextExtractor()
+        try:
+            parser.feed(main_doc)
+        except Exception as e:
+            logger.warning(f"HTML parsing error: {e}")
+
+        text = parser.get_text()
+
+        # Clean up
+        text = re.sub(r'\b\d{10}\s+\S*:\S+', '', text)  # XBRL patterns
+        text = re.sub(r'&#\d+;', ' ', text)  # HTML entities
+        text = re.sub(r'&[a-z]+;', ' ', text)  # Named entities
+        text = re.sub(r'\s+', ' ', text)  # Whitespace
+
+        return text.strip()
+
+    def _extract_filing_metadata(self, content: str) -> Dict[str, Any]:
+        """Extract metadata from filing content."""
+        metadata = {}
+
+        patterns = {
+            'company_name': r'COMPANY CONFORMED NAME:\s*(.+?)(?:\n|$)',
+            'filing_date': r'FILED AS OF DATE:\s*(\d{8})',
+            'cik': r'CENTRAL INDEX KEY:\s*(\d+)',
+            'fiscal_year_end': r'FISCAL YEAR END:\s*(\d{4})',
+            'filing_type': r'CONFORMED SUBMISSION TYPE:\s*(\S+)',
+        }
+        
+        for field, pattern in patterns.items():
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+                if field == 'filing_date' and len(value) == 8:
+                    value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
+                metadata[field] = value
+
+        return metadata
 
     def download_filing(
         self,
@@ -270,10 +393,8 @@ class SECLoader(BaseLoader):
         """
         logger.info(f"Downloading {filing_type} for {ticker}...")
 
-        # Download
         self.downloader.get(filing_type, ticker, limit=limit)
 
-        # Find downloaded files
         filing_dir = self.download_dir / "sec-edgar-filings" / ticker / filing_type
 
         if not filing_dir.exists():
@@ -282,7 +403,6 @@ class SECLoader(BaseLoader):
         documents = []
         for filing_folder in filing_dir.iterdir():
             if filing_folder.is_dir():
-                # Find the main filing file
                 for f in filing_folder.iterdir():
                     if f.name.endswith('.txt') or f.name.endswith('.htm'):
                         docs = self.load(str(f))
@@ -295,131 +415,12 @@ class SECLoader(BaseLoader):
         logger.info(f"Loaded {len(documents)} documents for {ticker}")
         return documents
 
-    def _extract_text(self, content: str) -> str:
-        """Extract clean text from HTML/XBRL content."""
-        # Parse HTML
-        parser = HTMLTextExtractor()
-        try:
-            parser.feed(content)
-        except Exception as e:
-            logger.warning(f"HTML parsing error: {e}")
-
-        text = parser.get_text()
-
-        # Clean up
-        text = re.sub(r'&#\d+;', ' ', text)  # HTML entities
-        text = re.sub(r'&[a-z]+;', ' ', text)  # Named entities
-        text = re.sub(r'\s+', ' ', text)  # Whitespace
-        text = re.sub(r'(\d)\s+(\d)', r'\1\2', text)  # Broken numbers
-
-        # Remove common boilerplate
-        boilerplate = [
-            r'Table of Contents',
-            r'UNITED STATES SECURITIES AND EXCHANGE COMMISSION',
-            r'Washington, D\.C\. 20549',
-        ]
-        for pattern in boilerplate:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-
-        return text.strip()
-
-    def _extract_filing_metadata(self, content: str) -> Dict[str, Any]:
-        """Extract metadata from filing content."""
-        metadata = {}
-
-        # Company name
-        company_match = re.search(
-            r'COMPANY CONFORMED NAME:\s*(.+?)(?:\n|$)',
-            content, re.IGNORECASE
-        )
-        if company_match:
-            metadata['company_name'] = company_match.group(1).strip()
-
-        # Filing date
-        date_match = re.search(
-            r'FILED AS OF DATE:\s*(\d{8})',
-            content, re.IGNORECASE
-        )
-        if date_match:
-            date_str = date_match.group(1)
-            metadata['filing_date'] = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
-
-        # CIK
-        cik_match = re.search(
-            r'CENTRAL INDEX KEY:\s*(\d+)',
-            content, re.IGNORECASE
-        )
-        if cik_match:
-            metadata['cik'] = cik_match.group(1)
-
-        # Fiscal year
-        fy_match = re.search(
-            r'FISCAL YEAR END:\s*(\d{4})',
-            content, re.IGNORECASE
-        )
-        if fy_match:
-            metadata['fiscal_year_end'] = fy_match.group(1)
-            
-        # Filing type
-        type_match = re.search(
-            r'CONFORMED SUBMISSION TYPE:\s*(\S+)',
-            content, re.IGNORECASE
-        )
-        if type_match:
-            metadata['filing_type'] = type_match.group(1)
-
-        return metadata
-
-    def _extract_sections(self, text: str) -> Dict[str, str]:
-        """Extract named sections from filing text."""
-        sections = {}
-        text_lower = text.lower()
-
-        # Find section positions
-        section_positions = []
-        for section_name, pattern in self.SECTION_PATTERNS.items():
-            matches = list(re.finditer(pattern, text_lower))
-            for match in matches:
-                section_positions.append((match.start(), section_name))
-
-        # Sort by position
-        section_positions.sort(key=lambda x: x[0])
-
-        # Extract text between sections
-        for i, (start_pos, section_name) in enumerate(section_positions):
-            # Find end position (start of next section or end of text)
-            if i + 1 < len(section_positions):
-                end_pos = section_positions[i + 1][0]
-            else:
-                end_pos = len(text)
-
-            section_text = text[start_pos:end_pos]
-
-            # Only keep if not already found (first occurrence)
-            if section_name not in sections:
-                sections[section_name] = section_text
-
-        # If no sections found, return full text as 'full_document'
-        if not sections:
-            sections['full_document'] = text
-
-        return sections
-
     def list_available_filings(
         self,
         ticker: str,
         filing_type: str = "10-K",
     ) -> List[Dict[str, Any]]:
-        """
-        List available filings in download directory.
-
-        Args:
-            ticker: Stock ticker
-            filing_type: Type of filing
-
-        Returns:
-            List of filing metadata dicts
-        """
+        """List available filings in download directory."""
         filing_dir = self.download_dir / "sec-edgar-filings" / ticker / filing_type
 
         if not filing_dir.exists():
