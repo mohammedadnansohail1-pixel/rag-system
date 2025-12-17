@@ -1,0 +1,49 @@
+# Financial document configuration (SEC filings, 10-K, 10-Q)
+# Tuned for financial reports with tables, numbers, and legal text
+
+fail_threshold: 0.4  # More lenient - financial docs have quirks
+auto_fix:
+  enabled: true
+  safe_only: true
+
+analyzers:
+  text_quality:
+    enabled: true
+    weight: 0.20
+    thresholds:
+      min_chars: 20              # Financial chunks tend to be denser
+      max_whitespace_ratio: 0.6  # Tables have more whitespace
+      max_special_char_ratio: 0.4  # Currency symbols, percentages
+      max_control_char_count: 10
+      max_consecutive_newlines: 8
+      max_repetition_ratio: 0.6
+
+  token_analysis:
+    enabled: true
+    weight: 0.30                 # Higher weight - token limits critical
+    thresholds:
+      model_max_tokens: 512
+      min_tokens: 10
+      token_char_ratio_max: 0.6  # Numbers tokenize differently
+      warn_at_percent: 0.75
+
+  structural:
+    enabled: true
+    weight: 0.25
+    thresholds:
+      min_sentences: 0           # Tables may not have sentences
+      max_header_distance: 100   # Longer sections
+      min_words_per_sentence: 2
+      max_incomplete_sentence_ratio: 0.5
+
+  semantic:
+    enabled: true
+    weight: 0.25
+    thresholds:
+      min_embedding_magnitude: 0.05  # Financial jargon may have lower magnitude
+      max_outlier_distance: 4.0      # More variance in financial content
+      embedding_dim: 384
+      min_coherence_score: 0.2
+
+output:
+  format: pass_fail
