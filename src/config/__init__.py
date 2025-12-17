@@ -2,6 +2,7 @@
 from src.config.domain_config import (
     DomainConfig,
     DomainRegistry,
+    EnrichmentConfig,
     get_domain_config,
     register_domain,
     FINANCIAL,
@@ -9,6 +10,7 @@ from src.config.domain_config import (
     LEGAL,
     GENERAL,
 )
+from src.config.chunk_enricher import ChunkEnricher
 
 __all__ = [
     "DomainConfig",

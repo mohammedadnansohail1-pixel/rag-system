@@ -24,7 +24,7 @@ class OllamaLLM(BaseLLM):
     Usage:
         llm = OllamaLLM(
             host="http://localhost:11434",
-            model="llama3.1:8b"
+            model="llama3.2:latest"
         )
         response = llm.generate("What is RAG?")
     """
@@ -32,7 +32,7 @@ class OllamaLLM(BaseLLM):
     def __init__(
         self,
         host: str = "http://localhost:11434",
-        model: str = "llama3.1:8b",
+        model: str = "llama3.2:latest",
         temperature: float = 0.1,
         max_tokens: int = 1024,
         system_prompt: Optional[str] = None,

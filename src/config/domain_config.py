@@ -81,6 +81,37 @@ class GenerationConfig:
     max_tokens: int = 1024
     citation_style: str = "inline"  # inline, footnote, none
 
+@dataclass
+class EnrichmentConfig:
+    """
+    Chunk enrichment settings based on research findings.
+    
+    Research sources:
+    - SAC: arXiv:2510.06999 (Legal) - Reduces DRM by 50%+
+    - Keywords: arXiv:2402.05131 (Financial) - Improves retrieval 5%+
+    - NL Descriptions: ICSE 2026 (Code) - Bridges semantic gap
+    """
+    # Summary-Augmented Chunking (CRITICAL for legal - 95% DRM without it)
+    add_document_summary: bool = False
+    summary_max_chars: int = 150
+    summary_prompt: Optional[str] = None
+    
+    # Keyword enrichment (useful for financial)
+    add_keywords: bool = False
+    max_keywords: int = 6
+    
+    # Section/heading context
+    add_section_context: bool = False
+    
+    # Natural language descriptions (useful for code)
+    add_nl_description: bool = False
+    nl_description_prompt: Optional[str] = None
+    
+    # Source path tracking
+    add_source_path: bool = True
+
+
+
 
 @dataclass
 class DomainConfig:
@@ -91,6 +122,7 @@ class DomainConfig:
     retrieval: RetrievalConfig
     expansion: ExpansionConfig
     generation: GenerationConfig
+    enrichment: EnrichmentConfig = field(default_factory=EnrichmentConfig)
     
     # Optional domain-specific patterns
     document_patterns: List[str] = field(default_factory=list)  # File patterns to match
@@ -195,10 +227,11 @@ _FINANCIAL_CONFIG = DomainConfig(
     name=FINANCIAL,
     description="SEC filings, earnings reports, financial statements",
     chunking=ChunkingConfig(
-        strategy="recursive",
-        chunk_size=1200,  # Larger for tables
+        strategy="recursive",  # TODO: element_type when implemented
+        chunk_size=1500,  # Research: arXiv:2402.05131 - larger preserves financial context
         chunk_overlap=200,
         separators=["\n\n", "\n", ". ", " "],
+        # Research: keep_tables_intact=True (to implement in chunker)
     ),
     retrieval=RetrievalConfig(
         top_k=10,
@@ -228,6 +261,16 @@ Passage:''',
         citation_style="inline",
     ),
     document_patterns=["10-K", "10-Q", "8-K", "earnings", "annual report"],
+    enrichment=EnrichmentConfig(
+        # Research: arXiv:2402.05131 - keywords improve financial retrieval
+        add_document_summary=True,
+        summary_max_chars=200,
+        summary_prompt="Summarize: company name, fiscal period, key metrics, main events. Under 200 chars.",
+        add_keywords=True,
+        max_keywords=6,
+        add_section_context=True,
+        add_source_path=True,
+    ),
 )
 
 # TECHNICAL DOMAIN (documentation, code, APIs)
@@ -235,16 +278,17 @@ _TECHNICAL_CONFIG = DomainConfig(
     name=TECHNICAL,
     description="Technical documentation, API docs, code repositories",
     chunking=ChunkingConfig(
-        strategy="recursive",
-        chunk_size=800,  # Smaller for code blocks
-        chunk_overlap=100,
-        separators=["\n\n", "\n```\n", "\n", ". "],  # Respect code blocks
+        strategy="recursive",  # TODO: syntax_aware when implemented
+        chunk_size=1000,  # Balance: code units + documentation context
+        chunk_overlap=100,  # Moderate overlap
+        separators=["\nclass ", "\ndef ", "\n\n", "\n```\n", "\n", ". "],  # Syntax-aware
+        # Research: include imports/class definitions with methods (to implement)
     ),
     retrieval=RetrievalConfig(
         top_k=8,
         sparse_encoder="bm25",
-        sparse_weight=0.4,  # Higher for keyword matching (function names)
-        dense_weight=0.6,
+        sparse_weight=0.35,  # Balanced: function names + semantic matching
+        dense_weight=0.65,
         use_reranking=False,
         bm25_k1=1.5,
         bm25_b=0.75,
@@ -274,6 +318,16 @@ _TECHNICAL_CONFIG = DomainConfig(
         citation_style="inline",
     ),
     document_patterns=["README", "docs", "api", ".md", ".rst"],
+    enrichment=EnrichmentConfig(
+        # Research: ICSE 2026/Qodo - NL descriptions bridge code↔query gap
+        add_document_summary=False,  # Less critical for code
+        add_keywords=True,  # Function names, parameters
+        max_keywords=8,
+        add_section_context=True,  # File path, class name
+        add_nl_description=True,  # Critical for code
+        nl_description_prompt="Describe what this code does in 1-2 sentences. Focus on purpose, inputs, outputs.",
+        add_source_path=True,
+    ),
 )
 
 # LEGAL DOMAIN (contracts, terms, policies)
@@ -282,8 +336,8 @@ _LEGAL_CONFIG = DomainConfig(
     description="Contracts, terms of service, legal agreements, policies",
     chunking=ChunkingConfig(
         strategy="recursive",
-        chunk_size=1500,  # Larger to keep clauses together
-        chunk_overlap=300,  # More overlap for context
+        chunk_size=1000,  # Balanced: precise retrieval + enough content
+        chunk_overlap=150,
         separators=["\n\n", "\nSection", "\nArticle", "\n", ". "],
     ),
     retrieval=RetrievalConfig(
@@ -320,6 +374,16 @@ _LEGAL_CONFIG = DomainConfig(
         citation_style="footnote",
     ),
     document_patterns=["terms", "privacy", "agreement", "contract", "policy"],
+    enrichment=EnrichmentConfig(
+        # arXiv:2510.06999 - SAC reduces DRM for multi-document scenarios
+        # Note: SAC most useful with multiple similar documents
+        add_document_summary=True,
+        summary_max_chars=80,  # Reduced to ~8% of chunk
+        summary_prompt="Summarize: document type, parties involved, core subject matter, key identifiers. Under 150 chars.",
+        add_keywords=False,  # Research: generic summary beats keyword enrichment
+        add_section_context=True,  # Include clause/section numbers
+        add_source_path=True,
+    ),
 )
 
 # GENERAL DOMAIN (fallback)
@@ -342,6 +406,12 @@ _GENERAL_CONFIG = DomainConfig(
     generation=GenerationConfig(
         system_prompt="You are a helpful assistant. Answer based on the provided context.",
         temperature=0.1,
+    ),
+    enrichment=EnrichmentConfig(
+        add_document_summary=False,
+        add_keywords=False,
+        add_section_context=False,
+        add_source_path=True,
     ),
 )
 

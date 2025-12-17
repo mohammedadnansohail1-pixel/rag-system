@@ -30,7 +30,7 @@ class OllamaEmbeddings(BaseEmbeddings):
         host: str = "http://localhost:11434",
         model: str = "nomic-embed-text",
         dimensions: int = 768,
-        max_retries: int = 3,
+        max_retries: int = 1,
     ):
         """
         Args:
@@ -54,8 +54,25 @@ class OllamaEmbeddings(BaseEmbeddings):
 
     def _clean_text(self, text: str) -> str:
         """Clean text of problematic characters."""
-        # Remove null bytes and other problematic chars
+        # Remove null bytes
         text = text.replace('\x00', '')
+        
+        # Fix common UTF-8 encoding issues
+        replacements = [
+            ('Â¶', ''),      # Garbled pilcrow
+            ('Â', ''),       # Garbled A-circumflex
+            ('â€"', '-'),    # Garbled em-dash
+            ('â€™', "'"),    # Garbled apostrophe
+            ('â€œ', '"'),    # Garbled left quote
+            ('â€', '"'),     # Garbled right quote
+            ('\u200b', ''), # Zero-width space
+        ]
+        for old, new in replacements:
+            text = text.replace(old, new)
+        
+        # Remove any remaining non-ASCII that might cause issues
+        text = text.encode('ascii', 'ignore').decode('ascii')
+        
         # Normalize whitespace
         text = ' '.join(text.split())
         return text

@@ -136,7 +136,7 @@ class RAGPipeline:
         show_progress: bool = True,
     ) -> int:
         """
-        Index documents into the pipeline.
+        Index documents with research-backed enrichment (SAC, keywords, etc).
         
         Args:
             documents: List of Document objects
@@ -145,36 +145,65 @@ class RAGPipeline:
         Returns:
             Number of chunks indexed
         """
-        # Create chunker with domain settings
+        from src.config import ChunkEnricher
+        from src.utils.text_utils import is_garbage_text
+        
         chunker = self.config.create_chunker()
+        enricher = ChunkEnricher(self.config, llm=self.llm)
         
-        # Chunk all documents
-        all_chunks = []
-        for doc in documents:
-            chunks = chunker.chunk(doc)
-            all_chunks.extend(chunks)
-        
-        if show_progress:
-            print(f"Created {len(all_chunks)} chunks from {len(documents)} documents")
-        
-        # Clean chunks
         texts = []
         metadatas = []
-        for chunk in all_chunks:
-            content = ''.join(c for c in chunk.content if c.isprintable() or c in '\n\t ')
-            if len(content) > 50:
-                texts.append(content)
-                metadatas.append(chunk.metadata)
+        total_chunks = 0
+        garbage_count = 0
+        sac_count = 0
         
-        # Index
+        for doc in documents:
+            chunks = chunker.chunk(doc)
+            total_chunks += len(chunks)
+            
+            # Filter garbage BEFORE enrichment
+            clean_chunks = []
+            for chunk in chunks:
+                if is_garbage_text(chunk.content):
+                    garbage_count += 1
+                    continue
+                clean_chunks.append(chunk)
+            
+            # Apply enrichment if configured
+            if self.config.enrichment.add_document_summary or \
+               self.config.enrichment.add_keywords or \
+               self.config.enrichment.add_nl_description:
+                enriched = enricher.enrich_document(
+                    clean_chunks, doc.content, doc.metadata
+                )
+                for ec in enriched:
+                    content = ''.join(c for c in ec['enriched_content'] if c.isprintable() or c in '\n\t ')
+                    if len(content) > 50:
+                        texts.append(content)
+                        metadatas.append(ec['metadata'])
+                        if ec.get('has_summary'):
+                            sac_count += 1
+            else:
+                for chunk in clean_chunks:
+                    content = ''.join(c for c in chunk.content if c.isprintable() or c in '\n\t ')
+                    if len(content) > 50:
+                        texts.append(content)
+                        metadatas.append(chunk.metadata)
+        
+        if show_progress:
+            print(f"Created {total_chunks} chunks from {len(documents)} documents")
+            if garbage_count > 0:
+                print(f"  Filtered: {garbage_count} garbage chunks")
+            if sac_count > 0:
+                print(f"  SAC enriched: {sac_count} chunks")
+        
         self.retriever.add_documents(texts, metadatas)
         self._indexed_count = len(texts)
         
         if show_progress:
             print(f"Indexed {len(texts)} chunks")
-        
         return len(texts)
-    
+
     def index_texts(
         self,
         texts: List[str],
