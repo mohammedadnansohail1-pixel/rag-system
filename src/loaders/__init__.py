@@ -1,5 +1,4 @@
 """Document loaders module - pluggable document loading."""
-# Import factory first (defines registry and decorator)
 from src.loaders.base import BaseLoader, Document
 from src.loaders.exceptions import LoaderError, UnsupportedFileTypeError
 from src.loaders.factory import (
@@ -14,6 +13,7 @@ from src.loaders.markdown_loader import MarkdownLoader
 from src.loaders.pdf_loader import PDFLoader
 from src.loaders.google_drive_loader import GoogleDriveLoader
 from src.loaders.sec_loader import SECLoader
+from src.loaders.web_loader import WebLoader, CrawlConfig
 
 __all__ = [
     "BaseLoader",
@@ -28,4 +28,6 @@ __all__ = [
     "PDFLoader",
     "GoogleDriveLoader",
     "SECLoader",
+    "WebLoader",
+    "CrawlConfig",
 ]
