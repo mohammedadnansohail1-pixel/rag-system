@@ -114,6 +114,7 @@ class HybridRetriever(BaseRetriever):
         query: str,
         top_k: Optional[int] = None,
         mode: str = "hybrid",
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[RetrievalResult]:
         """
         Retrieve relevant documents.
@@ -122,6 +123,7 @@ class HybridRetriever(BaseRetriever):
             query: Search query text
             top_k: Number of results (overrides default)
             mode: Search mode ('hybrid', 'dense', 'sparse')
+            metadata_filter: Metadata filter (e.g., {"ticker": "AAPL"})
 
         Returns:
             List of RetrievalResult objects
@@ -133,7 +135,7 @@ class HybridRetriever(BaseRetriever):
         elif mode == "sparse":
             return self._sparse_search(query, k)
         else:
-            return self._hybrid_search(query, k)
+            return self._hybrid_search(query, k, metadata_filter)
 
     def _dense_search(self, query: str, top_k: int) -> List[RetrievalResult]:
         """Dense-only search."""
@@ -158,7 +160,12 @@ class HybridRetriever(BaseRetriever):
 
         return self._convert_results(search_results)
 
-    def _hybrid_search(self, query: str, top_k: int) -> List[RetrievalResult]:
+    def _hybrid_search(
+        self, 
+        query: str, 
+        top_k: int,
+        query_filter: Optional[Dict[str, Any]] = None,
+    ) -> List[RetrievalResult]:
         """Hybrid search with RRF fusion."""
         # Encode query with both methods
         dense_query = self.embeddings.embed_text(query)
@@ -169,6 +176,7 @@ class HybridRetriever(BaseRetriever):
             dense_query=dense_query,
             sparse_query=sparse_query,
             top_k=top_k,
+            query_filter=query_filter,
         )
 
         logger.debug(f"Hybrid search returned {len(search_results)} results")

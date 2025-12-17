@@ -252,22 +252,31 @@ class QdrantHybridStore(BaseVectorStore):
         sparse_query: SparseVector,
         top_k: int = 5,
         dense_weight: float = 0.5,
+        query_filter: Optional[Dict[str, Any]] = None,
     ) -> List[SearchResult]:
         """
         Hybrid search combining dense and sparse with RRF fusion.
-        
         Args:
             dense_query: Dense embedding vector
             sparse_query: SPLADE sparse vector
             top_k: Number of results
             dense_weight: Weight for dense vs sparse (0.5 = equal)
-            
+            query_filter: Optional metadata filter (e.g., {"ticker": "AAPL"})
         Returns:
             List of SearchResult objects (RRF-fused)
         """
+        # Build Qdrant filter if provided
+        qdrant_filter = None
+        if query_filter:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            conditions = [
+                FieldCondition(key=k, match=MatchValue(value=v))
+                for k, v in query_filter.items()
+            ]
+            qdrant_filter = Filter(must=conditions)
+        
         # Use Qdrant's built-in RRF fusion via prefetch
         prefetch_limit = top_k * 4  # Get more candidates for fusion
-        
         results = self._client.query_points(
             collection_name=self.collection_name,
             prefetch=[
@@ -275,6 +284,7 @@ class QdrantHybridStore(BaseVectorStore):
                     query=dense_query,
                     using=self.DENSE_VECTOR_NAME,
                     limit=prefetch_limit,
+                    filter=qdrant_filter,
                 ),
                 Prefetch(
                     query=QdrantSparseVector(
@@ -283,11 +293,16 @@ class QdrantHybridStore(BaseVectorStore):
                     ),
                     using=self.SPARSE_VECTOR_NAME,
                     limit=prefetch_limit,
+                    filter=qdrant_filter,
                 ),
             ],
             query=FusionQuery(fusion=Fusion.RRF),
+            query_filter=qdrant_filter,
             limit=top_k,
         ).points
+        logger.debug(f"Hybrid search returned {len(results)} results")
+        return self._points_to_results(results)
+
         
         logger.debug(f"Hybrid search returned {len(results)} results")
         return self._points_to_results(results)
