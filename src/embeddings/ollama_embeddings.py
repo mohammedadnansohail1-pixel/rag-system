@@ -1,6 +1,7 @@
 """Ollama embedding provider."""
 
 import logging
+from src.utils.text_utils import is_garbage_text
 import time
 import requests
 from typing import List, Optional
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class OllamaEmbeddings(BaseEmbeddings):
     """
     Generates embeddings using Ollama.
-    
+
     Usage:
         embeddings = OllamaEmbeddings(
             host="http://localhost:11434",
@@ -42,7 +43,7 @@ class OllamaEmbeddings(BaseEmbeddings):
         self.model = model
         self._dimensions = dimensions
         self.max_retries = max_retries
-        
+
         logger.info(f"Initialized OllamaEmbeddings: model={model}, host={host}")
 
     def _truncate_text(self, text: str, max_chars: int = 4000) -> str:
@@ -62,17 +63,17 @@ class OllamaEmbeddings(BaseEmbeddings):
     def embed_text(self, text: str) -> List[float]:
         """
         Generate embedding for a single text.
-        
+
         Args:
             text: Text to embed
-            
+
         Returns:
             Embedding vector
         """
         text = self._clean_text(text)
         text = self._truncate_text(text)
         url = f"{self.host}/api/embeddings"
-        
+
         for attempt in range(self.max_retries):
             try:
                 response = requests.post(
@@ -90,28 +91,35 @@ class OllamaEmbeddings(BaseEmbeddings):
                     raise
 
     def embed_batch(
-        self, 
+        self,
         texts: List[str],
         skip_errors: bool = True
     ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts.
-        
+
         Args:
             texts: List of texts to embed
             skip_errors: If True, use zero vector for failed embeddings
-            
+
         Returns:
             List of embedding vectors
         """
         embeddings = []
         total = len(texts)
         failed = 0
-        
+        garbage_filtered = 0
+
         for i, text in enumerate(texts):
             if (i + 1) % 20 == 0 or i == 0:
                 print(f"  Embedding progress: {i + 1}/{total}")
-            
+
+            # Skip garbage text (base64, binary data from PDFs/SEC filings)
+            if is_garbage_text(text):
+                embeddings.append([0.0] * self._dimensions)
+                garbage_filtered += 1
+                continue
+
             try:
                 embedding = self.embed_text(text)
                 embeddings.append(embedding)
@@ -123,11 +131,13 @@ class OllamaEmbeddings(BaseEmbeddings):
                     logger.warning(f"Skipped chunk {i}: {e}")
                 else:
                     raise
-        
+
+        if garbage_filtered > 0:
+            print(f"  Filtered: {garbage_filtered} garbage chunks (base64/binary)")
         if failed > 0:
             print(f"  Warning: {failed} chunks failed embedding")
-        
-        logger.debug(f"Generated {len(embeddings)} embeddings ({failed} failed)")
+
+        logger.debug(f"Generated {len(embeddings)} embeddings ({failed} failed, {garbage_filtered} filtered)")
         return embeddings
 
     def get_dimensions(self) -> int:
