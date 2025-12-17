@@ -131,3 +131,54 @@ Answer based on the context above:"""
         except Exception as e:
             logger.error(f"Ollama health check failed: {e}")
             return False
+
+
+def format_context_with_metadata(
+    results,
+    include_source: bool = True,
+    include_section: bool = True,
+    include_domain: bool = False,
+    source_mapping: dict = None,
+) -> list:
+    """
+    Format retrieval results with metadata for better LLM context.
+    
+    Args:
+        results: List of RetrievalResult objects
+        include_source: Include source identifier
+        include_section: Include section name
+        include_domain: Include domain name
+        source_mapping: Optional dict to map source IDs to readable names
+                       e.g., {"AAPL": "Apple Inc.", "NFLX": "Netflix Inc."}
+    
+    Returns:
+        List of formatted context strings
+    """
+    if source_mapping is None:
+        source_mapping = {}
+    
+    formatted = []
+    for r in results:
+        source = r.metadata.get('source', '')
+        section = r.metadata.get('section', '')
+        domain = r.metadata.get('domain', '')
+        
+        # Map source to readable name if available
+        source_name = source_mapping.get(source, source)
+        
+        # Build header
+        header_parts = []
+        if include_source and source_name:
+            header_parts.append(f"Source: {source_name}")
+        if include_section and section:
+            header_parts.append(f"Section: {section}")
+        if include_domain and domain:
+            header_parts.append(f"Domain: {domain}")
+        
+        if header_parts:
+            header = " | ".join(header_parts)
+            formatted.append(f"[{header}]\n{r.content}")
+        else:
+            formatted.append(r.content)
+    
+    return formatted
