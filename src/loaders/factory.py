@@ -59,7 +59,13 @@ class LoaderFactory:
         
         # Load with section extraction (for SEC filings)
         docs = LoaderFactory.load(Path("10k.txt"), use_sections=True)
+        
+        # Auto-detect: SEC filings automatically use sections
+        docs = LoaderFactory.load(Path("10k.txt"), use_sections="auto")
     """
+
+    # Loaders that support and should default to section extraction
+    SECTION_LOADERS = {'SECLoader'}
 
     @classmethod
     def get_loader(cls, file_path: Path) -> BaseLoader:
@@ -90,14 +96,17 @@ class LoaderFactory:
     def load(
         cls, 
         file_path: Path, 
-        use_sections: bool = False,
+        use_sections: bool | str = "auto",
     ) -> List[Document]:
         """
         Load a single file.
 
         Args:
             file_path: Path to file
-            use_sections: If True, extract sections (for supported loaders like SEC)
+            use_sections: 
+                - True: Always extract sections
+                - False: Never extract sections
+                - "auto": Extract sections for supported loaders (default)
 
         Returns:
             List of Documents
@@ -106,13 +115,21 @@ class LoaderFactory:
         loader = cls.get_loader(file_path)
         loader_name = loader.__class__.__name__
         
-        logger.info(f"Loading {file_path} with {loader_name}")
+        # Determine if we should use sections
+        should_use_sections = False
+        if use_sections == "auto":
+            should_use_sections = (
+                loader_name in cls.SECTION_LOADERS 
+                and hasattr(loader, 'load_with_sections')
+            )
+        elif use_sections:
+            should_use_sections = hasattr(loader, 'load_with_sections')
         
-        # Use section extraction if requested and supported
-        if use_sections and hasattr(loader, 'load_with_sections'):
-            logger.info(f"Using section extraction for {file_path}")
+        if should_use_sections:
+            logger.info(f"Loading {file_path} with {loader_name} (section extraction)")
             return loader.load_with_sections(str(file_path))
         
+        logger.info(f"Loading {file_path} with {loader_name}")
         return loader.load(file_path)
 
     @classmethod
@@ -121,7 +138,7 @@ class LoaderFactory:
         directory: Path,
         recursive: bool = True,
         file_types: Optional[List[str]] = None,
-        use_sections: bool = False,
+        use_sections: bool | str = "auto",
     ) -> List[Document]:
         """
         Load all supported files from directory.
@@ -130,7 +147,10 @@ class LoaderFactory:
             directory: Path to directory
             recursive: Search subdirectories
             file_types: Filter by extensions (e.g., ['.pdf', '.md'])
-            use_sections: If True, extract sections (for supported loaders)
+            use_sections:
+                - True: Always extract sections
+                - False: Never extract sections  
+                - "auto": Extract sections for supported loaders (default)
 
         Returns:
             List of all Documents
