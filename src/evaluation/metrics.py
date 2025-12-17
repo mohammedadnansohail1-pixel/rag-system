@@ -1,295 +1,207 @@
-"""RAG evaluation metrics (RAGAS-style)."""
-
-import logging
-from dataclasses import dataclass
-from typing import List, Optional
-import re
-
-logger = logging.getLogger(__name__)
+"""Retrieval evaluation metrics."""
+import math
+from typing import List, Set, Union
 
 
-@dataclass
-class EvaluationResult:
+def precision_at_k(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+    k: int,
+) -> float:
     """
-    Result of evaluating a single RAG response.
+    Precision@K: What fraction of retrieved docs are relevant?
     
-    Attributes:
-        faithfulness: How well answer is grounded in context (0-1)
-        relevance: How relevant retrieved context is to query (0-1)
-        answer_relevance: How well answer addresses the query (0-1)
-        context_precision: Proportion of relevant chunks (0-1)
-        overall_score: Weighted average of all metrics
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        k: Number of top results to consider
+        
+    Returns:
+        Precision score between 0 and 1
     """
-    faithfulness: float
-    relevance: float
-    answer_relevance: float
-    context_precision: float
-    overall_score: float
+    if k <= 0:
+        return 0.0
     
-    def to_dict(self) -> dict:
-        return {
-            "faithfulness": round(self.faithfulness, 3),
-            "relevance": round(self.relevance, 3),
-            "answer_relevance": round(self.answer_relevance, 3),
-            "context_precision": round(self.context_precision, 3),
-            "overall_score": round(self.overall_score, 3),
-        }
-
-
-@dataclass 
-class BatchEvaluationResult:
-    """Results from evaluating multiple queries."""
-    results: List[EvaluationResult]
-    avg_faithfulness: float
-    avg_relevance: float
-    avg_answer_relevance: float
-    avg_context_precision: float
-    avg_overall_score: float
+    retrieved_at_k = retrieved_ids[:k]
+    if not retrieved_at_k:
+        return 0.0
     
-    def to_dict(self) -> dict:
-        return {
-            "num_queries": len(self.results),
-            "avg_faithfulness": round(self.avg_faithfulness, 3),
-            "avg_relevance": round(self.avg_relevance, 3),
-            "avg_answer_relevance": round(self.avg_answer_relevance, 3),
-            "avg_context_precision": round(self.avg_context_precision, 3),
-            "avg_overall_score": round(self.avg_overall_score, 3),
-        }
+    relevant_retrieved = sum(1 for doc_id in retrieved_at_k if doc_id in relevant_ids)
+    return relevant_retrieved / len(retrieved_at_k)
 
 
-class RAGEvaluator:
+def recall_at_k(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+    k: int,
+) -> float:
     """
-    Evaluates RAG system responses using LLM-as-judge.
+    Recall@K: What fraction of relevant docs were retrieved?
     
-    Metrics:
-    - Faithfulness: Is answer grounded in retrieved context?
-    - Relevance: Is retrieved context relevant to query?
-    - Answer Relevance: Does answer address the query?
-    - Context Precision: What proportion of context is useful?
-    
-    Usage:
-        evaluator = RAGEvaluator(llm)
-        result = evaluator.evaluate(
-            query="What is ML?",
-            answer="Machine learning is...",
-            contexts=["ML is a subset of AI...", "..."]
-        )
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        k: Number of top results to consider
+        
+    Returns:
+        Recall score between 0 and 1
     """
+    if not relevant_ids:
+        return 1.0  # No relevant docs means perfect recall
     
-    def __init__(self, llm, weights: Optional[dict] = None):
-        """
-        Args:
-            llm: LLM for evaluation (must have generate method)
-            weights: Custom weights for overall score
-        """
-        self.llm = llm
-        self.weights = weights or {
-            "faithfulness": 0.3,
-            "relevance": 0.25,
-            "answer_relevance": 0.25,
-            "context_precision": 0.2,
-        }
-        
-        logger.info("Initialized RAGEvaluator")
+    retrieved_at_k = set(retrieved_ids[:k])
+    relevant_retrieved = len(retrieved_at_k & relevant_ids)
+    return relevant_retrieved / len(relevant_ids)
+
+
+def f1_at_k(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+    k: int,
+) -> float:
+    """
+    F1@K: Harmonic mean of precision and recall.
     
-    def evaluate(
-        self,
-        query: str,
-        answer: str,
-        contexts: List[str],
-        ground_truth: Optional[str] = None,
-    ) -> EvaluationResult:
-        """
-        Evaluate a single RAG response.
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        k: Number of top results to consider
         
-        Args:
-            query: Original question
-            answer: Generated answer
-            contexts: Retrieved context chunks
-            ground_truth: Optional ground truth answer
-            
-        Returns:
-            EvaluationResult with all metrics
-        """
-        # Calculate each metric
-        faithfulness = self._evaluate_faithfulness(answer, contexts)
-        relevance = self._evaluate_relevance(query, contexts)
-        answer_relevance = self._evaluate_answer_relevance(query, answer)
-        context_precision = self._evaluate_context_precision(query, contexts)
-        
-        # Calculate weighted overall score
-        overall_score = (
-            self.weights["faithfulness"] * faithfulness +
-            self.weights["relevance"] * relevance +
-            self.weights["answer_relevance"] * answer_relevance +
-            self.weights["context_precision"] * context_precision
-        )
-        
-        return EvaluationResult(
-            faithfulness=faithfulness,
-            relevance=relevance,
-            answer_relevance=answer_relevance,
-            context_precision=context_precision,
-            overall_score=overall_score,
-        )
+    Returns:
+        F1 score between 0 and 1
+    """
+    p = precision_at_k(retrieved_ids, relevant_ids, k)
+    r = recall_at_k(retrieved_ids, relevant_ids, k)
     
-    def evaluate_batch(
-        self,
-        queries: List[str],
-        answers: List[str],
-        contexts_list: List[List[str]],
-    ) -> BatchEvaluationResult:
-        """
-        Evaluate multiple RAG responses.
-        
-        Args:
-            queries: List of questions
-            answers: List of generated answers
-            contexts_list: List of context lists
-            
-        Returns:
-            BatchEvaluationResult with averages
-        """
-        results = []
-        
-        for query, answer, contexts in zip(queries, answers, contexts_list):
-            result = self.evaluate(query, answer, contexts)
-            results.append(result)
-        
-        # Calculate averages
-        n = len(results)
-        avg_faithfulness = sum(r.faithfulness for r in results) / n
-        avg_relevance = sum(r.relevance for r in results) / n
-        avg_answer_relevance = sum(r.answer_relevance for r in results) / n
-        avg_context_precision = sum(r.context_precision for r in results) / n
-        avg_overall = sum(r.overall_score for r in results) / n
-        
-        return BatchEvaluationResult(
-            results=results,
-            avg_faithfulness=avg_faithfulness,
-            avg_relevance=avg_relevance,
-            avg_answer_relevance=avg_answer_relevance,
-            avg_context_precision=avg_context_precision,
-            avg_overall_score=avg_overall,
-        )
+    if p + r == 0:
+        return 0.0
     
-    def _evaluate_faithfulness(self, answer: str, contexts: List[str]) -> float:
-        """Check if answer is grounded in context."""
-        if not contexts:
-            return 0.0
-        
-        context_combined = "\n\n".join(contexts)
-        
-        prompt = f"""You are evaluating whether an answer is faithful to the given context.
-        
-CONTEXT:
-{context_combined}
+    return 2 * (p * r) / (p + r)
 
-ANSWER:
-{answer}
 
-Rate how well the answer is supported by the context on a scale of 0-10:
-- 0: Answer contains claims not in context (hallucination)
-- 5: Answer is partially supported
-- 10: Answer is fully grounded in context
-
-Respond with ONLY a number between 0 and 10."""
-
-        try:
-            response = self.llm.generate(prompt, system_prompt="You are a precise evaluator. Respond only with a number.")
-            score = self._extract_score(response)
-            return score / 10.0
-        except Exception as e:
-            logger.warning(f"Faithfulness evaluation failed: {e}")
-            return 0.5
+def mrr(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+) -> float:
+    """
+    Mean Reciprocal Rank: 1/rank of first relevant result.
     
-    def _evaluate_relevance(self, query: str, contexts: List[str]) -> float:
-        """Check if retrieved context is relevant to query."""
-        if not contexts:
-            return 0.0
-        
-        context_combined = "\n\n".join(contexts)
-        
-        prompt = f"""You are evaluating whether retrieved context is relevant to a query.
-
-QUERY:
-{query}
-
-RETRIEVED CONTEXT:
-{context_combined}
-
-Rate how relevant the context is to answering the query on a scale of 0-10:
-- 0: Context is completely irrelevant
-- 5: Context is somewhat relevant
-- 10: Context is highly relevant and useful
-
-Respond with ONLY a number between 0 and 10."""
-
-        try:
-            response = self.llm.generate(prompt, system_prompt="You are a precise evaluator. Respond only with a number.")
-            score = self._extract_score(response)
-            return score / 10.0
-        except Exception as e:
-            logger.warning(f"Relevance evaluation failed: {e}")
-            return 0.5
+    Higher is better (1.0 means first result is relevant).
     
-    def _evaluate_answer_relevance(self, query: str, answer: str) -> float:
-        """Check if answer addresses the query."""
-        prompt = f"""You are evaluating whether an answer addresses the question asked.
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        
+    Returns:
+        MRR score between 0 and 1
+    """
+    for i, doc_id in enumerate(retrieved_ids):
+        if doc_id in relevant_ids:
+            return 1.0 / (i + 1)
+    return 0.0
 
-QUESTION:
-{query}
 
-ANSWER:
-{answer}
-
-Rate how well the answer addresses the question on a scale of 0-10:
-- 0: Answer does not address the question at all
-- 5: Answer partially addresses the question
-- 10: Answer directly and completely addresses the question
-
-Respond with ONLY a number between 0 and 10."""
-
-        try:
-            response = self.llm.generate(prompt, system_prompt="You are a precise evaluator. Respond only with a number.")
-            score = self._extract_score(response)
-            return score / 10.0
-        except Exception as e:
-            logger.warning(f"Answer relevance evaluation failed: {e}")
-            return 0.5
+def hit_rate(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+    k: int,
+) -> float:
+    """
+    Hit Rate@K: Did we find at least one relevant doc in top K?
     
-    def _evaluate_context_precision(self, query: str, contexts: List[str]) -> float:
-        """Evaluate what proportion of contexts are useful."""
-        if not contexts:
-            return 0.0
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        k: Number of top results to consider
         
-        relevant_count = 0
-        
-        for context in contexts:
-            prompt = f"""Is this context relevant to the query?
+    Returns:
+        1.0 if hit, 0.0 if miss
+    """
+    retrieved_at_k = set(retrieved_ids[:k])
+    return 1.0 if (retrieved_at_k & relevant_ids) else 0.0
 
-QUERY: {query}
 
-CONTEXT: {context[:500]}
-
-Respond with only YES or NO."""
-
-            try:
-                response = self.llm.generate(prompt, system_prompt="Respond only YES or NO.")
-                if "YES" in response.upper():
-                    relevant_count += 1
-            except:
-                relevant_count += 0.5
-        
-        return relevant_count / len(contexts)
+def dcg_at_k(
+    relevance_scores: List[float],
+    k: int,
+) -> float:
+    """
+    Discounted Cumulative Gain at K.
     
-    def _extract_score(self, response: str) -> float:
-        """Extract numeric score from LLM response."""
-        # Find numbers in response
-        numbers = re.findall(r'\b(\d+(?:\.\d+)?)\b', response)
+    Args:
+        relevance_scores: List of relevance scores for each position
+        k: Number of positions to consider
         
-        if numbers:
-            score = float(numbers[0])
-            return min(max(score, 0), 10)  # Clamp to 0-10
+    Returns:
+        DCG score
+    """
+    dcg = 0.0
+    for i, rel in enumerate(relevance_scores[:k]):
+        # Using log2(i + 2) for positions starting at 0
+        dcg += rel / math.log2(i + 2)
+    return dcg
+
+
+def ndcg_at_k(
+    retrieved_ids: List[str],
+    relevance_map: dict,
+    k: int,
+) -> float:
+    """
+    Normalized Discounted Cumulative Gain at K.
+    
+    Measures ranking quality considering graded relevance.
+    
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevance_map: Dict mapping doc_id -> relevance score (0-3 typical)
+        k: Number of top results to consider
         
-        return 5.0  # Default to middle score
+    Returns:
+        NDCG score between 0 and 1
+    """
+    # Get relevance scores for retrieved docs
+    relevance_scores = [
+        relevance_map.get(doc_id, 0.0)
+        for doc_id in retrieved_ids[:k]
+    ]
+    
+    # Calculate DCG
+    dcg = dcg_at_k(relevance_scores, k)
+    
+    # Calculate ideal DCG (perfect ranking)
+    ideal_scores = sorted(relevance_map.values(), reverse=True)[:k]
+    idcg = dcg_at_k(ideal_scores, k)
+    
+    if idcg == 0:
+        return 0.0
+    
+    return dcg / idcg
+
+
+def average_precision(
+    retrieved_ids: List[str],
+    relevant_ids: Set[str],
+) -> float:
+    """
+    Average Precision: Mean of precision at each relevant doc position.
+    
+    Args:
+        retrieved_ids: List of retrieved document IDs (ordered by rank)
+        relevant_ids: Set of relevant document IDs
+        
+    Returns:
+        AP score between 0 and 1
+    """
+    if not relevant_ids:
+        return 1.0
+    
+    num_relevant = 0
+    precision_sum = 0.0
+    
+    for i, doc_id in enumerate(retrieved_ids):
+        if doc_id in relevant_ids:
+            num_relevant += 1
+            precision_sum += num_relevant / (i + 1)
+    
+    return precision_sum / len(relevant_ids)

@@ -114,6 +114,7 @@ class QdrantVectorStore(BaseVectorStore):
         for text, embedding, metadata, doc_id in zip(texts, embeddings, metadatas, ids):
             payload = {
                 "content": text,
+                "id": doc_id,
                 **metadata
             }
             points.append(PointStruct(
