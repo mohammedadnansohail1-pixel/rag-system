@@ -174,3 +174,15 @@ enhanced:
   # Hierarchical Retrieval
   hierarchical:
     enabled: false  # Enable when summarization is enabled
+
+# ============================================================
+# CACHING
+# ============================================================
+caching:
+  embeddings:
+    enabled: true
+    cache_dir: ".cache/embeddings"
+  queries:
+    enabled: true
+    cache_dir: ".cache/queries"
+    ttl_seconds: 300  # 5 minutes
