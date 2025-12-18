@@ -1,4 +1,4 @@
-"""Professional RAG System UI with Streamlit."""
+"""Enhanced RAG System UI with Multi-Document Support."""
 
 import streamlit as st
 import sys
@@ -6,12 +6,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.embeddings.ollama_embeddings import OllamaEmbeddings
-from src.vectorstores.qdrant_store import QdrantVectorStore
-from src.retrieval.dense_retriever import DenseRetriever
+from src.embeddings import OllamaEmbeddings, CachedEmbeddings
+from src.vectorstores.qdrant_hybrid_store import QdrantHybridStore
+from src.retrieval import HybridRetriever
 from src.generation.ollama_llm import OllamaLLM
-from src.pipeline.rag_pipeline_production import ProductionRAGPipeline
-from src.guardrails.config import GuardrailsConfig
+from src.documents import MultiDocumentPipeline
+from src.pipeline.enhanced_rag_pipeline import EnhancedRAGConfig
 
 # Page config
 st.set_page_config(
@@ -21,12 +21,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Professional CSS with proper contrast
+# Professional CSS
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
-    /* Global */
     .stApp {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         background-color: #f8fafc;
@@ -35,12 +34,10 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* Override Streamlit dark text issues */
     .stMarkdown, .stText, p, span, label {
         color: #1e293b !important;
     }
     
-    /* Sidebar */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
     }
@@ -48,9 +45,7 @@ st.markdown("""
     [data-testid="stSidebar"] .stMarkdown,
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] .stMetricValue,
-    [data-testid="stSidebar"] .stMetricLabel {
+    [data-testid="stSidebar"] label {
         color: #e2e8f0 !important;
     }
     
@@ -60,18 +55,17 @@ st.markdown("""
         color: #ffffff !important;
     }
     
-    /* Header Card */
     .header-card {
         background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
         border-radius: 16px;
-        padding: 2.5rem;
-        margin-bottom: 2rem;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
         box-shadow: 0 10px 40px rgba(59, 130, 246, 0.3);
     }
     
     .header-title {
         color: #ffffff !important;
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: 700;
         margin: 0 0 0.5rem 0;
         text-align: center;
@@ -79,25 +73,22 @@ st.markdown("""
     
     .header-subtitle {
         color: rgba(255,255,255,0.9) !important;
-        font-size: 1.1rem;
+        font-size: 1rem;
         text-align: center;
         margin: 0;
     }
     
-    /* Chat Messages */
     .user-message {
         background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
         color: #ffffff !important;
         padding: 1rem 1.5rem;
         border-radius: 16px 16px 4px 16px;
         margin: 1rem 0;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
     }
     
     .user-message p {
         color: #ffffff !important;
         margin: 0;
-        font-weight: 500;
     }
     
     .assistant-message {
@@ -106,7 +97,6 @@ st.markdown("""
         padding: 1.5rem;
         border-radius: 4px 16px 16px 16px;
         margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
     
     .assistant-message p {
@@ -115,7 +105,6 @@ st.markdown("""
         line-height: 1.7;
     }
     
-    /* Confidence Badges */
     .badge-high {
         display: inline-block;
         background: linear-gradient(135deg, #10b981 0%, #059669 100%);
@@ -124,8 +113,7 @@ st.markdown("""
         border-radius: 20px;
         font-weight: 600;
         font-size: 0.8rem;
-        margin-bottom: 0.75rem;
-        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+        margin-right: 0.5rem;
     }
     
     .badge-medium {
@@ -136,8 +124,7 @@ st.markdown("""
         border-radius: 20px;
         font-weight: 600;
         font-size: 0.8rem;
-        margin-bottom: 0.75rem;
-        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        margin-right: 0.5rem;
     }
     
     .badge-low {
@@ -148,11 +135,38 @@ st.markdown("""
         border-radius: 20px;
         font-weight: 600;
         font-size: 0.8rem;
-        margin-bottom: 0.75rem;
-        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+        margin-right: 0.5rem;
     }
     
-    /* Score Badge */
+    .company-tag {
+        display: inline-block;
+        background: #e0e7ff;
+        color: #4338ca !important;
+        padding: 0.25rem 0.75rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.25rem;
+    }
+    
+    .topic-tag {
+        display: inline-block;
+        background: #dcfce7;
+        color: #166534 !important;
+        padding: 0.2rem 0.5rem;
+        border-radius: 8px;
+        font-size: 0.7rem;
+        margin-right: 0.25rem;
+    }
+    
+    .source-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    
     .score-badge {
         display: inline-block;
         background: #3b82f6;
@@ -163,50 +177,24 @@ st.markdown("""
         font-weight: 600;
     }
     
-    /* Source Card */
-    .source-card {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-    }
-    
-    .source-card p {
-        color: #475569 !important;
-        font-size: 0.9rem;
-        line-height: 1.6;
-        margin: 0.5rem 0 0 0;
-    }
-    
-    /* Stats Card */
-    .stats-container {
-        display: flex;
-        gap: 1rem;
-        margin: 1rem 0;
-    }
-    
-    .stat-box {
+    .stat-card {
         background: rgba(59, 130, 246, 0.1);
         border-radius: 12px;
         padding: 1rem;
         text-align: center;
-        flex: 1;
     }
     
     .stat-value {
         color: #3b82f6 !important;
-        font-size: 1.75rem;
+        font-size: 1.5rem;
         font-weight: 700;
     }
     
     .stat-label {
         color: #64748b !important;
-        font-size: 0.8rem;
-        margin-top: 0.25rem;
+        font-size: 0.75rem;
     }
     
-    /* Buttons */
     .stButton > button {
         background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%) !important;
         color: #ffffff !important;
@@ -214,80 +202,18 @@ st.markdown("""
         padding: 0.6rem 1.5rem !important;
         border-radius: 10px !important;
         font-weight: 600 !important;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
-        transition: transform 0.2s, box-shadow 0.2s !important;
     }
     
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
-    }
-    
-    /* Input Fields */
     .stTextInput > div > div > input {
         background: #ffffff !important;
         border: 2px solid #e2e8f0 !important;
         border-radius: 10px !important;
-        padding: 0.75rem 1rem !important;
         color: #1e293b !important;
-        font-size: 1rem !important;
     }
     
-    .stTextInput > div > div > input:focus {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder {
-        color: #94a3b8 !important;
-    }
-    
-    /* Section Headers */
-    .section-header {
-        color: #1e293b !important;
-        font-size: 1.25rem;
-        font-weight: 600;
-        margin: 1.5rem 0 1rem 0;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    /* Example Question Buttons */
-    .example-btn {
+    .stSelectbox > div > div {
         background: #ffffff !important;
-        border: 2px solid #e2e8f0 !important;
-        color: #475569 !important;
-        padding: 0.75rem 1rem !important;
         border-radius: 10px !important;
-        font-weight: 500 !important;
-        transition: all 0.2s !important;
-    }
-    
-    .example-btn:hover {
-        border-color: #3b82f6 !important;
-        color: #3b82f6 !important;
-        background: #f0f9ff !important;
-    }
-    
-    /* File Uploader */
-    [data-testid="stFileUploader"] {
-        background: rgba(59, 130, 246, 0.05);
-        border: 2px dashed rgba(59, 130, 246, 0.3);
-        border-radius: 12px;
-        padding: 1rem;
-    }
-    
-    /* Expander */
-    .streamlit-expanderHeader {
-        background: #f8fafc !important;
-        border-radius: 8px !important;
-        color: #475569 !important;
-    }
-    
-    /* Metrics Override */
-    [data-testid="stMetricValue"] {
-        color: #3b82f6 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -295,50 +221,38 @@ st.markdown("""
 
 @st.cache_resource
 def init_pipeline():
-    """Initialize pipeline (cached)."""
+    """Initialize enhanced pipeline (cached)."""
     try:
-        embeddings = OllamaEmbeddings(
-            host="http://localhost:11434",
-            model="nomic-embed-text",
-            dimensions=768
+        base_embeddings = OllamaEmbeddings(model="nomic-embed-text")
+        embeddings = CachedEmbeddings(base_embeddings, enabled=True)
+        
+        vectorstore = QdrantHybridStore(
+            collection_name="enterprise_rag_v2",
+            dense_dimensions=768,
         )
         
-        vectorstore = QdrantVectorStore(
-            host="localhost",
-            port=6333,
-            collection_name="enterprise_rag",
-            dimensions=768
-        )
-        
-        retriever = DenseRetriever(
+        base_retriever = HybridRetriever(
             embeddings=embeddings,
             vectorstore=vectorstore,
-            top_k=10
+            sparse_encoder="fastembed",
         )
         
-        llm = OllamaLLM(
-            host="http://localhost:11434",
-            model="llama3.2:latest",
-            temperature=0.1
-        )
+        llm = OllamaLLM(model="llama3.2")
         
-        guardrails_config = GuardrailsConfig(
-            score_threshold=0.4,
-            min_sources=2,
-            min_avg_score=0.5,
-        )
+        config = EnhancedRAGConfig.from_dict({
+            "chunking": {"strategy": "structure_aware", "chunk_size": 1500},
+            "enrichment": {"enabled": True, "mode": "fast"},
+            "summarization": {"enabled": False},
+            "parent_child": {"enabled": False},
+        })
         
-        pipeline = ProductionRAGPipeline(
+        pipeline = MultiDocumentPipeline(
             embeddings=embeddings,
             vectorstore=vectorstore,
-            retriever=retriever,
+            retriever=base_retriever,
             llm=llm,
-            chunker_config={
-                "strategy": "recursive",
-                "chunk_size": 1000,
-                "chunk_overlap": 100
-            },
-            guardrails_config=guardrails_config,
+            config=config,
+            registry_path=".cache/ui_doc_registry.json",
         )
         
         return pipeline, None
@@ -353,7 +267,7 @@ def main():
     st.markdown("""
     <div class="header-card">
         <h1 class="header-title">🔍 Enterprise RAG System</h1>
-        <p class="header-subtitle">AI-powered document intelligence with production-grade guardrails</p>
+        <p class="header-subtitle">Multi-document AI with cross-company analysis</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -369,6 +283,7 @@ def main():
     with st.sidebar:
         st.markdown("## 📁 Documents")
         
+        # File upload
         uploaded_files = st.file_uploader(
             "Upload Files",
             type=["pdf", "txt", "md"],
@@ -379,31 +294,68 @@ def main():
         if uploaded_files:
             if st.button("📥 Process Files", use_container_width=True):
                 with st.spinner("Processing..."):
-                    total_chunks = 0
                     for uploaded_file in uploaded_files:
                         temp_path = Path(f"/tmp/{uploaded_file.name}")
                         temp_path.write_bytes(uploaded_file.read())
                         try:
-                            chunks = pipeline.ingest_file(str(temp_path))
-                            total_chunks += chunks
-                            st.success(f"✅ {uploaded_file.name}")
+                            stats = pipeline.ingest_file(str(temp_path))
+                            if stats.get("skipped"):
+                                st.info(f"⏭️ {uploaded_file.name} (already indexed)")
+                            else:
+                                st.success(f"✅ {uploaded_file.name} ({stats.get('chunks', 0)} chunks)")
                         except Exception as e:
-                            st.error(f"❌ {uploaded_file.name}")
+                            st.error(f"❌ {uploaded_file.name}: {e}")
                         finally:
                             temp_path.unlink(missing_ok=True)
-                    
-                    if total_chunks > 0:
-                        st.session_state.chunks_indexed = st.session_state.get('chunks_indexed', 0) + total_chunks
+        
+        # Directory ingestion
+        st.markdown("---")
+        dir_path = st.text_input("📂 Directory Path", placeholder="data/sec-filings/")
+        if dir_path and st.button("📥 Ingest Directory", use_container_width=True):
+            with st.spinner("Ingesting directory..."):
+                try:
+                    stats = pipeline.ingest_directory(dir_path, skip_existing=True)
+                    st.success(f"✅ {stats['files_processed']} files, {stats['total_chunks']} chunks")
+                    if stats['companies']:
+                        st.info(f"Companies: {', '.join(stats['companies'])}")
+                except Exception as e:
+                    st.error(str(e))
         
         st.markdown("---")
         
-        # Stats
-        st.markdown("## 📊 Stats")
+        # Registry stats
+        st.markdown("## 📊 Registry")
+        reg_stats = pipeline.registry_stats
+        
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Chunks", st.session_state.get('chunks_indexed', 0))
+            st.metric("Documents", reg_stats.get("total_documents", 0))
         with col2:
-            st.metric("Queries", st.session_state.get('query_count', 0))
+            st.metric("Chunks", reg_stats.get("total_chunks", 0))
+        
+        # Companies
+        companies = pipeline.companies
+        if companies:
+            st.markdown("### 🏢 Companies")
+            for company in companies:
+                st.markdown(f"• {company}")
+        
+        st.markdown("---")
+        
+        # Filters
+        st.markdown("## 🔍 Query Filters")
+        
+        filter_company = st.multiselect(
+            "Filter by Company",
+            options=companies if companies else [],
+            default=[],
+        )
+        
+        filter_type = st.multiselect(
+            "Filter by Filing Type",
+            options=reg_stats.get("filing_types", []),
+            default=[],
+        )
         
         st.markdown("---")
         
@@ -416,105 +368,195 @@ def main():
         
         st.markdown("---")
         
-        # Guardrails info
-        st.markdown("## 🛡️ Guardrails")
-        st.markdown("Score: `≥0.4` | Sources: `≥2` | Avg: `≥0.5`")
-        
-        st.markdown("---")
-        
-        # Sample data
-        if st.button("📚 Load Samples", use_container_width=True):
-            with st.spinner("Loading..."):
+        # Load SEC samples
+        if st.button("📚 Load SEC Samples", use_container_width=True):
+            with st.spinner("Loading SEC filings..."):
                 try:
-                    chunks = pipeline.ingest_directory("data/sample", file_types=[".txt", ".md"])
-                    st.session_state.chunks_indexed = st.session_state.get('chunks_indexed', 0) + chunks
-                    st.success(f"✅ {chunks} chunks loaded!")
+                    stats = pipeline.ingest_directory(
+                        "data/test_adaptive/sec-edgar-filings/",
+                        recursive=True,
+                        skip_existing=True,
+                    )
+                    st.success(f"✅ {stats['files_processed']} filings loaded")
+                    st.rerun()
                 except Exception as e:
                     st.error(str(e))
     
-    # Main chat area
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
+    # Main area - tabs
+    tab1, tab2, tab3 = st.tabs(["💬 Chat", "📊 Compare Companies", "📋 Registry"])
     
-    # Display messages
-    for msg in st.session_state.messages:
-        if msg['role'] == 'user':
-            st.markdown(f"""
-            <div class="user-message">
-                <p>💬 {msg['content']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            confidence = msg.get('confidence', 'medium')
-            st.markdown(f"""
-            <div class="badge-{confidence}">{confidence.upper()} CONFIDENCE</div>
-            <div class="assistant-message">
-                <p>{msg['content']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Sources expander
-            if msg.get('sources'):
-                with st.expander(f"📎 {len(msg['sources'])} Sources"):
-                    for src in msg['sources']:
-                        st.markdown(f"""
-                        <div class="source-card">
-                            <span class="score-badge">{src['score']:.0%} match</span>
-                            <p>{src['content'][:250]}...</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-    
-    # Input area
-    st.markdown('<p class="section-header">💡 Ask a Question</p>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        query = st.text_input(
-            "Question",
-            placeholder="What would you like to know about your documents?",
-            label_visibility="collapsed"
-        )
-    with col2:
-        ask = st.button("Ask", use_container_width=True)
-    
-    if ask and query:
-        st.session_state.messages.append({"role": "user", "content": query})
-        
-        with st.spinner("🔍 Searching..."):
-            response = pipeline.query(query, top_k=10)
-            st.session_state.query_count = st.session_state.get('query_count', 0) + 1
-            
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": response.answer,
-                "confidence": response.confidence,
-                "sources": response.sources,
-            })
-        st.rerun()
-    
-    # Example questions
-    if not st.session_state.messages:
-        st.markdown('<p class="section-header">🎯 Try These</p>', unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns(3)
-        examples = [
-            "What is this document about?",
-            "What are the key points?",
-            "Summarize the main findings"
-        ]
-        
-        for col, q in zip([col1, col2, col3], examples):
-            with col:
-                if st.button(q, use_container_width=True, key=q):
-                    st.session_state.messages.append({"role": "user", "content": q})
-                    st.rerun()
-    
-    # Clear button
-    if st.session_state.messages:
-        st.markdown("---")
-        if st.button("🗑️ Clear Chat"):
+    # TAB 1: Chat
+    with tab1:
+        if 'messages' not in st.session_state:
             st.session_state.messages = []
+        
+        # Display messages
+        for msg in st.session_state.messages:
+            if msg['role'] == 'user':
+                st.markdown(f"""
+                <div class="user-message">
+                    <p>💬 {msg['content']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                confidence = msg.get('confidence', 'medium')
+                companies_cited = msg.get('companies_cited', [])
+                topics = msg.get('topics', [])
+                
+                # Badges
+                badges_html = f'<span class="badge-{confidence}">{confidence.upper()}</span>'
+                for company in companies_cited[:3]:
+                    short_name = company.split(',')[0].split(' ')[0]
+                    badges_html += f'<span class="company-tag">{short_name}</span>'
+                
+                st.markdown(f"""
+                <div>{badges_html}</div>
+                <div class="assistant-message">
+                    <p>{msg['content']}</p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Topics
+                if topics:
+                    topics_html = ''.join([f'<span class="topic-tag">{t}</span>' for t in topics[:5]])
+                    st.markdown(f"<div>{topics_html}</div>", unsafe_allow_html=True)
+                
+                # Sources
+                if msg.get('sources'):
+                    with st.expander(f"📎 {len(msg['sources'])} Sources"):
+                        for src in msg['sources']:
+                            company = src.get('metadata', {}).get('company_name', 'Unknown')
+                            score = src.get('score', 0)
+                            content = src.get('content', '')[:200]
+                            st.markdown(f"""
+                            <div class="source-card">
+                                <span class="score-badge">{score:.0%}</span>
+                                <span class="company-tag">{company.split(',')[0]}</span>
+                                <p>{content}...</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+        
+        # Input
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            query = st.text_input(
+                "Question",
+                placeholder="Ask about your documents...",
+                label_visibility="collapsed",
+                key="chat_input"
+            )
+        with col2:
+            ask = st.button("Ask", use_container_width=True, key="ask_btn")
+        
+        if ask and query:
+            st.session_state.messages.append({"role": "user", "content": query})
+            
+            with st.spinner("🔍 Searching..."):
+                response = pipeline.query(
+                    query,
+                    top_k=10,
+                    filter_companies=filter_company if filter_company else None,
+                    filter_filing_types=filter_type if filter_type else None,
+                )
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": response.answer,
+                    "confidence": response.confidence,
+                    "sources": response.sources,
+                    "companies_cited": response.companies_cited,
+                    "topics": response.topics_found,
+                })
             st.rerun()
+        
+        # Example questions
+        if not st.session_state.messages:
+            st.markdown("### 🎯 Try These")
+            examples = [
+                "What are the main risk factors?",
+                "What was the company's revenue?",
+                "What is the cybersecurity approach?",
+            ]
+            cols = st.columns(3)
+            for col, q in zip(cols, examples):
+                with col:
+                    if st.button(q, use_container_width=True, key=f"ex_{q}"):
+                        st.session_state.messages.append({"role": "user", "content": q})
+                        st.rerun()
+        
+        # Clear
+        if st.session_state.messages:
+            if st.button("🗑️ Clear Chat"):
+                st.session_state.messages = []
+                st.rerun()
+    
+    # TAB 2: Compare Companies
+    with tab2:
+        st.markdown("### 📊 Cross-Company Comparison")
+        
+        if len(companies) < 2:
+            st.info("Ingest documents from multiple companies to enable comparison.")
+        else:
+            selected_companies = st.multiselect(
+                "Select Companies to Compare",
+                options=companies,
+                default=companies[:3] if len(companies) >= 3 else companies,
+            )
+            
+            comparison_query = st.text_input(
+                "Comparison Question",
+                placeholder="Compare revenue growth across companies...",
+                key="compare_input"
+            )
+            
+            if st.button("🔍 Compare", use_container_width=True) and comparison_query and selected_companies:
+                with st.spinner("Analyzing companies..."):
+                    response = pipeline.compare_companies(
+                        comparison_query,
+                        companies=selected_companies,
+                        top_k_per_company=3,
+                    )
+                    
+                    st.markdown(f"""
+                    <div class="assistant-message">
+                        <p>{response.answer}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander(f"📎 {len(response.sources)} Sources"):
+                        for src in response.sources:
+                            company = src.get('metadata', {}).get('company_name', 'Unknown')
+                            st.markdown(f"""
+                            <div class="source-card">
+                                <span class="company-tag">{company.split(',')[0]}</span>
+                                <p>{src.get('content', '')[:200]}...</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+    
+    # TAB 3: Registry
+    with tab3:
+        st.markdown("### 📋 Document Registry")
+        
+        docs = pipeline.registry.all_documents
+        
+        if not docs:
+            st.info("No documents ingested yet.")
+        else:
+            for doc in docs:
+                with st.expander(f"📄 {doc.company_name or 'Unknown'} - {doc.filing_type or 'Document'}"):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Chunks", doc.chunk_count)
+                    with col2:
+                        st.metric("Characters", f"{doc.total_chars:,}")
+                    with col3:
+                        st.metric("Sections", len(doc.sections))
+                    
+                    st.markdown(f"**Filing Date:** {doc.filing_date or 'N/A'}")
+                    st.markdown(f"**Source:** `{doc.source_path}`")
+                    
+                    if doc.sections:
+                        st.markdown(f"**Sections:** {', '.join(doc.sections[:5])}")
 
 
 if __name__ == "__main__":

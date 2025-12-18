@@ -1,7 +1,6 @@
 """Guardrails configuration with sensible defaults."""
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 
 @dataclass
@@ -18,10 +17,10 @@ class GuardrailsConfig:
         log_filtered_chunks: Log chunks that were filtered out
     """
     # Retrieval filtering
-    score_threshold: float = 0.4
+    score_threshold: float = 0.35
     min_sources: int = 2
     max_sources: int = 5
-    min_avg_score: float = 0.5
+    min_avg_score: float = 0.45
     
     # Response behavior
     require_explicit_uncertainty: bool = True
@@ -41,12 +40,12 @@ class GuardrailsConfig:
             raise ValueError("min_avg_score must be between 0.0 and 1.0")
 
 
-# Production defaults - conservative settings
+# Production defaults - balanced settings
 PRODUCTION_CONFIG = GuardrailsConfig(
-    score_threshold=0.4,
+    score_threshold=0.35,
     min_sources=2,
     max_sources=5,
-    min_avg_score=0.5,
+    min_avg_score=0.45,
     require_explicit_uncertainty=True,
     log_filtered_chunks=True,
 )

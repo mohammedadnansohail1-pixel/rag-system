@@ -101,3 +101,11 @@ class FastEmbedSparseEncoder:
     def is_fitted(self) -> bool:
         """Always True - FastEmbed doesn't need fitting."""
         return True
+    
+    def health_check(self) -> bool:
+        """Check if encoder is working."""
+        try:
+            _ = self.model
+            return True
+        except Exception:
+            return False
