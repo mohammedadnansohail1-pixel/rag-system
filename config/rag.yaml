@@ -79,11 +79,11 @@ vectorstore:
 # ============================================================
 retrieval:
   search_type: "hybrid"  # Options: dense, sparse, hybrid
-  
+
   # Stage 1: Initial retrieval (high recall)
   retrieval_top_k: 20  # Candidates to retrieve
   score_threshold: null  # Optional minimum score
-  
+
   # Stage 2: Reranking (high precision)
   reranking:
     enabled: true
@@ -138,3 +138,39 @@ evaluation:
     - context_precision
     - context_recall
   test_dataset: "./data/eval/test_questions.json"
+
+# ============================================================
+# ENHANCED RAG FEATURES (Phase 1-4)
+# ============================================================
+enhanced:
+  # Phase 1: Structure-Aware Chunking
+  chunking:
+    strategy: structure_aware  # Options: structure_aware, recursive, fixed
+    chunk_size: 1500
+    chunk_overlap: 150
+    generate_parent_chunks: true
+    parent_chunk_size: 4000
+
+  # Phase 2: Metadata Enrichment
+  enrichment:
+    enabled: true
+    mode: fast  # Options: fast, full, minimal
+
+  # Phase 3: Parent-Child Retrieval
+  parent_child:
+    enabled: true
+    parent_weight: 0.95
+
+  # Phase 4: Hierarchical Summaries
+  summarization:
+    enabled: false
+    min_chunks_for_summary: 5
+    summary_boost: 1.5
+    # Use partial matching - these will match sections like:
+    # "Item 1A - Risk Factors Certain factors may..."
+    # "Item 7 - Management's Discussion and Analysis..."
+    sections: null  # null = auto-select based on min_chunks
+
+  # Hierarchical Retrieval
+  hierarchical:
+    enabled: false  # Enable when summarization is enabled

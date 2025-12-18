@@ -98,6 +98,51 @@ Key Points:"""
         
         logger.info(f"Initialized SectionSummarizer: max_content={max_content_for_summary}")
     
+    def _match_section(self, section_name: str, target: str) -> bool:
+        """Check if section_name matches target (partial match)."""
+        # Normalize both
+        section_lower = section_name.lower().strip()
+        target_lower = target.lower().strip()
+        
+        # Exact match
+        if section_lower == target_lower:
+            return True
+        
+        # Section starts with target
+        if section_lower.startswith(target_lower):
+            return True
+        
+        # Target is contained in section
+        if target_lower in section_lower:
+            return True
+        
+        return False
+    
+    def _group_chunks_by_section(
+        self, 
+        chunks: List[Chunk],
+        sections_to_summarize: Optional[List[str]] = None,
+    ) -> Dict[str, List[Chunk]]:
+        """Group chunks by section with partial matching."""
+        sections = defaultdict(list)
+        
+        for chunk in chunks:
+            if not chunk.section:
+                continue
+            
+            if sections_to_summarize:
+                # Find matching target section
+                for target in sections_to_summarize:
+                    if self._match_section(chunk.section, target):
+                        # Use the target name (normalized)
+                        sections[target].append(chunk)
+                        break
+            else:
+                # Use actual section name
+                sections[chunk.section].append(chunk)
+        
+        return dict(sections)
+    
     def summarize_sections(
         self,
         chunks: List[Chunk],
@@ -114,22 +159,15 @@ Key Points:"""
             List of SectionSummary objects
         """
         # Group chunks by section
-        sections = defaultdict(list)
-        for chunk in chunks:
-            if chunk.section:
-                sections[chunk.section].append(chunk)
+        sections = self._group_chunks_by_section(chunks, sections_to_summarize)
         
-        # Filter to major sections
-        if sections_to_summarize:
-            sections = {k: v for k, v in sections.items() if k in sections_to_summarize}
-        else:
-            # Auto-select sections with enough content
-            sections = {
-                k: v for k, v in sections.items()
-                if len(v) >= self.min_chunks_for_summary
-            }
+        # Filter to sections with enough content
+        sections = {
+            k: v for k, v in sections.items()
+            if len(v) >= self.min_chunks_for_summary
+        }
         
-        logger.info(f"Generating summaries for {len(sections)} sections")
+        logger.info(f"Generating summaries for {len(sections)} sections: {list(sections.keys())}")
         
         summaries = []
         for section_name, section_chunks in sections.items():
