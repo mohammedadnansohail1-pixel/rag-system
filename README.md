@@ -332,7 +332,7 @@ I build production RAG systems for companies. Services include:
 - **Performance Optimization** - Make your existing RAG faster
 - **Architecture Consulting** - Design review and best practices
 
-**Contact:** [Your Email] | [Your LinkedIn]
+**Contact:** [mohammedadnansohail1@gmail.com] | [https://www.linkedin.com/in/adnan21/]
 
 ---
 
