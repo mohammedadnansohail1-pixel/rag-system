@@ -149,7 +149,7 @@ class TestEmbeddingAnalyzer:
 
     def test_analyzer_creation(self):
         """Analyzer should create with default analyzers."""
-        assert len(self.analyzer.analyzers) == 4  # 4 default analyzers
+        assert len(self.analyzer.analyzers) == 5  # 5 default analyzers
 
     def test_good_text_passes(self):
         """Well-formed text should pass overall."""

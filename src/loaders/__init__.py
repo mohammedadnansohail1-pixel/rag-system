@@ -34,3 +34,10 @@ __all__ = [
     "WebLoader",
     "CrawlConfig",
 ]
+
+# Enhanced PDF loader with table extraction
+from src.loaders.pdf_loader_enhanced import (
+    EnhancedPDFLoader,
+    load_pdf_with_tables,
+    PDFPLUMBER_AVAILABLE,
+)

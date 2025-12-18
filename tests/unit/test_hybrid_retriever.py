@@ -89,7 +89,8 @@ class TestHybridRetriever:
     @pytest.fixture
     def mock_sparse_encoder(self):
         """Create mock sparse encoder."""
-        mock = Mock()
+        from src.retrieval.sparse_encoder import BaseSparseEncoder
+        mock = Mock(spec=BaseSparseEncoder)
         mock.encode.return_value = SparseVector(indices=[1, 2, 3], values=[0.5, 0.3, 0.2])
         mock.encode_batch.return_value = [
             SparseVector(indices=[1, 2], values=[0.5, 0.3]),

@@ -12,7 +12,7 @@ class TestGuardrailsConfig:
     def test_default_config(self):
         """Should have sensible defaults."""
         config = GuardrailsConfig()
-        assert config.score_threshold == 0.4
+        assert config.score_threshold == 0.35
         assert config.min_sources == 2
 
     def test_validate_valid_config(self):

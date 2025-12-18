@@ -35,3 +35,14 @@ __all__ = [
     "EvaluationDataset",
     "create_dataset_from_qa_pairs",
 ]
+
+# Semantic faithfulness (better than n-gram)
+from src.evaluation.metrics import calculate_faithfulness_semantic
+
+# NLI-based faithfulness (production-grade)
+from src.evaluation.faithfulness_nli import (
+    NLIFaithfulnessEvaluator,
+    FaithfulnessResult,
+    calculate_faithfulness_nli,
+    NLI_AVAILABLE,
+)

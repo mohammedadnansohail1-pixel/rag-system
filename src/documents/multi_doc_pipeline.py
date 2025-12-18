@@ -264,7 +264,8 @@ class MultiDocumentPipeline(EnhancedRAGPipeline):
         
         sources = [
             {
-                "content": r.content[:300] + "..." if len(r.content) > 300 else r.content,
+                "content": r.content,  # Full content for evaluation
+                "preview": r.content[:300] + "..." if len(r.content) > 300 else r.content,
                 "metadata": r.metadata,
                 "score": r.score,
             }

@@ -10,9 +10,16 @@ from src.generation.factory import register_llm
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SYSTEM_PROMPT = """You are a helpful assistant that answers questions based on the provided context.
-Always cite the source of your information.
-If the context doesn't contain the answer, say "I don't have enough information to answer this."
+DEFAULT_SYSTEM_PROMPT = """You are a precise assistant that answers questions ONLY based on the provided context.
+
+STRICT RULES:
+1. ONLY use information explicitly stated in the provided context
+2. Do NOT add facts, details, or claims from your training knowledge
+3. If the context doesn't contain specific information, say "The provided documents don't mention this"
+4. Cite sources for every claim (e.g., "According to Source 1...")
+5. If you're unsure whether something is in the context, don't include it
+
+Your goal is 100% faithfulness to the source documents. Never invent or assume information.
 """
 
 
