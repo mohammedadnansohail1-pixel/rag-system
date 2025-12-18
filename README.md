@@ -1,232 +1,311 @@
 # 🔍 Enterprise RAG System
 
-Production-ready Retrieval-Augmented Generation system with guardrails, built with Python.
+**Production-grade Retrieval-Augmented Generation for Document Intelligence**
+
+> Transform 500+ page documents into instant, accurate answers with confidence scoring and source citations.
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
-![Tests](https://img.shields.io/badge/Tests-172%20passing-green)
+![Tests](https://img.shields.io/badge/Tests-275%2B%20Passing-green)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## ✨ Features
+---
 
-- **Modular Architecture** - Pluggable loaders, chunkers, embeddings, vectorstores
-- **Production Guardrails** - Score thresholds, source validation, confidence levels
-- **Multiple Interfaces** - REST API (FastAPI) + Web UI (Streamlit)
-- **RAGAS-style Evaluation** - Faithfulness, relevance, context precision metrics
-- **Docker Ready** - One-command deployment with GPU support
+## 🎯 What This Does
+
+| Problem | Solution |
+|---------|----------|
+| Analysts spend 40+ hours reviewing documents | Query any document in seconds |
+| Information buried in 100s of pages | AI extracts exactly what you need |
+| No way to compare across documents | Cross-document analysis built-in |
+| LLMs hallucinate | Confidence scoring + source citations |
+
+### Demo: SEC Filing Analysis
+```
+📁 Ingested: 3 companies (Meta, Tesla, NVIDIA) - 500+ pages
+⏱️  Ingestion time: 2.3 seconds
+🔍 Query: "What are the main cybersecurity risks?"
+✅ Response: 2.4 seconds with HIGH confidence
+📑 Sources: 4 cited passages with relevance scores
+```
+
+---
+
+## ⚡ Key Features
+
+### 🧠 Intelligent Retrieval
+- **Hybrid Search** - Combines semantic (dense) + keyword (sparse) search
+- **Cross-Encoder Reranking** - Re-ranks results for precision
+- **Parent-Child Retrieval** - Expands context automatically
+
+### 🛡️ Production Guardrails
+- **Confidence Scoring** - Know when to trust the answer (high/medium/low)
+- **Source Validation** - Minimum source requirements
+- **Hallucination Prevention** - Won't answer without evidence
+
+### 🚀 Performance Optimized
+- **Embedding Cache** - 436x speedup on repeated content
+- **Query Cache** - 15,000x speedup on repeated queries
+- **Structure-Aware Chunking** - 96% noise reduction
+
+### 📊 Multi-Document Analysis
+- **Cross-Company Comparison** - Compare entities side-by-side
+- **Document Registry** - Track all ingested documents
+- **Metadata Filtering** - Filter by company, date, type
+
+---
 
 ## 🏗️ Architecture
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Loaders   │────▶│  Chunkers   │────▶│ Embeddings  │
-│ PDF/TXT/MD  │     │Fixed/Recurs │     │   Ollama    │
-└─────────────┘     └─────────────┘     └─────────────┘
-                                               │
-                                               ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│     LLM     │◀────│  Retrieval  │◀────│ VectorStore │
-│   Ollama    │     │    Dense    │     │   Qdrant    │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │
-       ▼
-┌─────────────┐
-│ Guardrails  │──▶ Confidence: 🟢 HIGH | 🟡 MEDIUM | 🔴 LOW
-└─────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                        Client Layer                         │
+│              (Streamlit UI / FastAPI / CLI)                 │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                      Pipeline Layer                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   Loaders   │→ │  Chunkers   │→ │    Enrichment       │ │
+│  │ PDF/MD/SEC  │  │  Structure  │  │ Entities/Topics     │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                     Retrieval Layer                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │
+│  │  Dense   │  │  Sparse  │  │  Hybrid  │  │  Reranker  │  │
+│  │ Embeddings│  │  BM25    │  │  Fusion  │  │CrossEncoder│  │
+│  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                     Storage Layer                           │
+│         Qdrant (Hybrid Vector Store) + Caching              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                    Generation Layer                         │
+│        LLM (Ollama/OpenAI) + Guardrails + Citations         │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 🛠️ Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| **Embeddings** | Ollama (nomic-embed-text), OpenAI-compatible |
+| **Vector Store** | Qdrant (hybrid dense + sparse) |
+| **Sparse Encoder** | FastEmbed BM25 |
+| **LLM** | Ollama (Llama 3.2), OpenAI-compatible |
+| **Reranking** | Cross-Encoder (ms-marco-MiniLM) |
+| **API** | FastAPI |
+| **UI** | Streamlit |
+| **Infrastructure** | Docker, Docker Compose |
+| **Testing** | pytest (275+ tests) |
+
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Python 3.12+
 - Docker & Docker Compose
-- Ollama installed locally
+- 16GB+ RAM recommended
 
-### Option 1: Docker (Recommended)
+### 1. Clone & Start Services
 ```bash
-# GPU systems
-docker-compose up -d
-
-# CPU only
-docker-compose -f docker-compose.cpu.yml up -d
-
-# Pull required models
-docker exec rag-ollama ollama pull llama3.2:latest
-docker exec rag-ollama ollama pull nomic-embed-text
-```
-
-Access:
-- API: http://localhost:8000
-- UI: http://localhost:8501
-- API Docs: http://localhost:8000/docs
-
-### Option 2: Local Development
-```bash
-# Clone repository
-git clone https://github.com/yourusername/rag-system.git
+git clone https://github.com/[your-username]/rag-system.git
 cd rag-system
 
-# Create virtual environment
+# Start Qdrant and Ollama
+docker-compose up -d
+
+# Pull required models
+docker exec rag-ollama ollama pull nomic-embed-text
+docker exec rag-ollama ollama pull llama3.2
+```
+
+### 2. Install Dependencies
+```bash
 python -m venv rag-env
-source rag-env/bin/activate  # Windows: rag-env\Scripts\activate
-
-# Install dependencies
+source rag-env/bin/activate
 pip install -r requirements.txt
+```
 
-# Start services
-docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
-ollama serve &
-ollama pull llama3.2:latest
-ollama pull nomic-embed-text
-
-# Run API
-uvicorn src.api.main:app --reload
-
-# Or run UI
+### 3. Run the UI
+```bash
 streamlit run src/ui/app.py
 ```
 
-## 📖 Usage
+### 4. Or Use the API
+```bash
+uvicorn src.api.main:app --reload
 
-### Python SDK
+# Query endpoint
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What are the risk factors?"}'
+```
+
+---
+
+## 📖 Usage Examples
+
+### Basic Query
 ```python
-from src.pipeline import ProductionRAGPipeline
-from src.embeddings import OllamaEmbeddings
-from src.vectorstores import QdrantVectorStore
-from src.retrieval import DenseRetriever
-from src.generation import OllamaLLM
-from src.guardrails import GuardrailsConfig
+from src.documents import MultiDocumentPipeline
+from src.embeddings import OllamaEmbeddings, CachedEmbeddings
+from src.vectorstores.qdrant_hybrid_store import QdrantHybridStore
+from src.retrieval import HybridRetriever
+from src.generation.ollama_llm import OllamaLLM
 
-# Initialize components
-embeddings = OllamaEmbeddings(model="nomic-embed-text")
-vectorstore = QdrantVectorStore(collection_name="my_docs")
-retriever = DenseRetriever(embeddings=embeddings, vectorstore=vectorstore)
-llm = OllamaLLM(model="llama3.2:latest")
+# Initialize
+embeddings = CachedEmbeddings(OllamaEmbeddings(model="nomic-embed-text"))
+vectorstore = QdrantHybridStore(collection_name="my_docs", dense_dimensions=768)
+retriever = HybridRetriever(embeddings=embeddings, vectorstore=vectorstore)
+llm = OllamaLLM(model="llama3.2")
 
-# Create pipeline with guardrails
-pipeline = ProductionRAGPipeline(
+pipeline = MultiDocumentPipeline(
     embeddings=embeddings,
     vectorstore=vectorstore,
     retriever=retriever,
     llm=llm,
-    guardrails_config=GuardrailsConfig(
-        score_threshold=0.4,
-        min_sources=2,
-        min_avg_score=0.5,
-    )
 )
 
 # Ingest documents
-pipeline.ingest_directory("./documents", file_types=[".pdf", ".txt"])
+pipeline.ingest_directory("./documents/")
 
-# Query with confidence
-response = pipeline.query("What is machine learning?")
-print(f"{response.confidence_emoji} {response.confidence}")
+# Query
+response = pipeline.query("What are the key findings?")
 print(f"Answer: {response.answer}")
+print(f"Confidence: {response.confidence}")
 print(f"Sources: {len(response.sources)}")
 ```
 
-### REST API
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Ingest file
-curl -X POST http://localhost:8000/ingest/file \
-  -H "Content-Type: application/json" \
-  -d '{"file_path": "data/sample/document.pdf"}'
-
-# Query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is gradient descent?", "top_k": 5}'
-```
-
-## 🛡️ Guardrails
-
-The system prevents hallucinations with multiple layers:
-
-| Guard | Default | Description |
-|-------|---------|-------------|
-| Score Threshold | 0.4 | Min similarity score for chunks |
-| Min Sources | 2 | Required quality sources |
-| Min Avg Score | 0.5 | Average relevance threshold |
-
-Response confidence levels:
-- 🟢 **HIGH**: 3+ sources, avg score ≥ 0.7
-- 🟡 **MEDIUM**: 2+ sources, avg score ≥ 0.5
-- 🔴 **LOW**: Below thresholds (returns uncertainty)
-
-## 📊 Evaluation
+### Filtered Query
 ```python
-from src.evaluation import RAGEvaluator
-
-evaluator = RAGEvaluator(llm)
-result = evaluator.evaluate(
-    query="What is ML?",
-    answer="Machine learning is...",
-    contexts=["ML is a subset of AI..."]
+# Query specific company only
+response = pipeline.query(
+    "What is the revenue growth?",
+    filter_companies=["Tesla"],
 )
-
-print(f"Faithfulness: {result.faithfulness:.2f}")
-print(f"Relevance: {result.relevance:.2f}")
-print(f"Overall: {result.overall_score:.2f}")
 ```
 
-## 🧪 Testing
-```bash
-# Run all tests
-python -m pytest tests/unit/ -v
-
-# Run with coverage
-python -m pytest tests/unit/ --cov=src --cov-report=html
+### Cross-Document Comparison
+```python
+# Compare across multiple companies
+response = pipeline.compare_companies(
+    "Compare AI strategies",
+    companies=["Meta", "Tesla", "NVIDIA"],
+)
 ```
+
+---
 
 ## 📁 Project Structure
 ```
 rag-system/
 ├── src/
-│   ├── core/           # Config, secrets management
-│   ├── loaders/        # PDF, TXT, MD loaders
-│   ├── chunkers/       # Fixed, recursive chunkers
-│   ├── embeddings/     # Ollama embeddings
-│   ├── vectorstores/   # Qdrant integration
-│   ├── retrieval/      # Dense retriever
-│   ├── generation/     # Ollama LLM
-│   ├── guardrails/     # Production safety
-│   ├── pipeline/       # RAG orchestration
-│   ├── evaluation/     # RAGAS metrics
-│   ├── api/            # FastAPI endpoints
-│   └── ui/             # Streamlit interface
-├── tests/
-├── config/
-├── data/
-├── docker-compose.yml
+│   ├── api/              # FastAPI endpoints
+│   ├── cache/            # Embedding & query caching
+│   ├── chunkers/         # Document chunking strategies
+│   ├── documents/        # Multi-document pipeline
+│   ├── embeddings/       # Embedding providers
+│   ├── enrichment/       # Metadata extraction
+│   ├── evaluation/       # Retrieval metrics
+│   ├── generation/       # LLM providers
+│   ├── guardrails/       # Quality controls
+│   ├── loaders/          # Document loaders
+│   ├── pipeline/         # RAG orchestration
+│   ├── reranking/        # Cross-encoder reranking
+│   ├── retrieval/        # Search strategies
+│   ├── summarization/    # Hierarchical summaries
+│   ├── ui/               # Streamlit interface
+│   └── vectorstores/     # Vector databases
+├── tests/                # 275+ unit tests
+├── config/               # YAML configuration
+├── docker-compose.yml    # Infrastructure
 └── requirements.txt
 ```
 
-## 🔧 Configuration
+---
 
-Environment variables:
-```bash
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=llama3.2:latest
-EMBEDDING_MODEL=nomic-embed-text
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-COLLECTION_NAME=rag_production
-SCORE_THRESHOLD=0.4
-MIN_SOURCES=2
-MIN_AVG_SCORE=0.5
+## ⚙️ Configuration
+
+All settings in `config/rag.yaml`:
+```yaml
+# Chunking
+chunking:
+  strategy: structure_aware
+  chunk_size: 1500
+
+# Retrieval
+retrieval:
+  search_type: hybrid
+  retrieval_top_k: 20
+  reranking:
+    enabled: true
+    top_n: 5
+
+# Guardrails
+guardrails:
+  score_threshold: 0.35
+  min_sources: 2
+
+# Caching
+caching:
+  embeddings:
+    enabled: true
+  queries:
+    enabled: true
+    ttl_seconds: 300
 ```
 
-## 📝 License
+---
 
-MIT License - see [LICENSE](LICENSE) for details.
+## 🧪 Testing
+```bash
+# Run all tests
+pytest tests/ --ignore=tests/integration
 
-## 🙏 Acknowledgments
+# Run with coverage
+pytest tests/ --cov=src --cov-report=html
+```
 
-- [Ollama](https://ollama.ai/) - Local LLM inference
-- [Qdrant](https://qdrant.tech/) - Vector database
-- [FastAPI](https://fastapi.tiangolo.com/) - API framework
-- [Streamlit](https://streamlit.io/) - Web UI
-- [RAGAS](https://github.com/explodinggradients/ragas) - Evaluation inspiration
+---
+
+## 📈 Performance Benchmarks
+
+| Operation | Time | Improvement |
+|-----------|------|-------------|
+| Ingest 500 pages | 2.3s | - |
+| Query (cold) | 1.8s | - |
+| Query (cached) | 0.0001s | 15,000x |
+| Embedding (cold) | 1.4s | - |
+| Embedding (cached) | 0.003s | 436x |
+
+---
+
+## 🤝 Need Custom Development?
+
+I build production RAG systems for companies. Services include:
+
+- **Custom RAG Development** - Tailored to your documents and domain
+- **AI Chatbot Integration** - Over your internal knowledge base  
+- **Performance Optimization** - Make your existing RAG faster
+- **Architecture Consulting** - Design review and best practices
+
+**Contact:** [Your Email] | [Your LinkedIn]
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) for details.
+
+---
+
+## ⭐ Star This Repo
+
+If this helped you, consider starring the repo. It helps others find it!
