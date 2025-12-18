@@ -435,3 +435,44 @@ We measure what matters:
 - [Benchmarking LLM Faithfulness in RAG](https://arxiv.org/abs/2505.04847)
 - [Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf)
 - [DeBERTa-v3 for NLI](https://huggingface.co/MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli)
+
+---
+
+## 🔄 Cache Invalidation Strategy
+
+**The Question:** "If I change a document, does the cache serve old, wrong answers?"
+
+**The Answer:** No. Cache keys are **content-hashed**, not path-based.
+
+### How It Works
+```python
+# Cache key = hash of content, not filename
+cache_key = hashlib.sha256(text.encode()).hexdigest()
+```
+
+| Scenario | Cache Behavior |
+|----------|----------------|
+| Same document, same content | ✅ Cache hit |
+| Same filename, different content | ❌ Cache miss (different hash) |
+| Different filename, same content | ✅ Cache hit (same hash) |
+
+**Result:** Document changes automatically invalidate relevant cache entries. No manual cache clearing needed.
+
+---
+
+## ❓ FAQ: Addressing Common Due Diligence Questions
+
+### Q: "How do you combine BM25 and dense scores?"
+**A:** Reciprocal Rank Fusion (RRF). We ignore raw scores and use rank positions only, avoiding the normalization problem where unbounded BM25 scores (0-15+) would dominate normalized dense scores (0-1).
+
+### Q: "How do you handle tables that span multiple pages?"
+**A:** Structure-aware chunking detects table boundaries using pdfplumber and keeps tables intact, even if they exceed chunk size limits. Tables are converted to Markdown format.
+
+### Q: "Is confidence scoring just asking the LLM 'are you sure?'"
+**A:** No. Confidence is deterministic based on retrieval metrics: number of sources, average similarity score, and top score. The LLM is never asked to self-assess.
+
+### Q: "What prevents hallucination?"
+**A:** Three layers: (1) Strict system prompt forbidding use of training knowledge, (2) Deterministic confidence scoring that refuses to answer when evidence is weak, (3) NLI-based faithfulness evaluation that catches unsupported claims.
+
+### Q: "How do you measure faithfulness?"
+**A:** NLI (Natural Language Inference) using DeBERTa. We decompose answers into claims and check entailment against retrieved context. This catches semantic equivalence that n-gram methods miss.
