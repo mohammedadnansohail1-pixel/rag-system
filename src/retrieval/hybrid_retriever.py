@@ -12,6 +12,7 @@ from src.core.types import SparseVector
 from src.embeddings.base import BaseEmbeddings
 from src.retrieval.fastembed_sparse_encoder import FastEmbedSparseEncoder
 from src.reranking.base import BaseReranker
+from src.retrieval.classification import QueryComplexityClassifier
 from src.vectorstores.qdrant_hybrid_store import QdrantHybridStore
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ class HybridRetriever(BaseRetriever):
         self.top_k = top_k
         self.score_threshold = score_threshold
         self.reranker = reranker
+        self.query_classifier = QueryComplexityClassifier(use_llm_fallback=True)
         
         # Initialize sparse encoder
         self.sparse_encoder = self._init_sparse_encoder(sparse_encoder)
@@ -135,8 +137,21 @@ class HybridRetriever(BaseRetriever):
         """
         k = top_k or self.top_k
         
-        # Get more candidates if reranking
-        search_k = k * 3 if (self.reranker and use_reranker) else k
+        # Classify query complexity for adaptive reranking
+        classification = self.query_classifier.classify_detailed(query)
+        should_rerank = (
+            self.reranker 
+            and use_reranker 
+            and classification.should_rerank
+        )
+        
+        # Get more candidates if reranking (multiplier based on complexity)
+        search_k = k * classification.candidates_multiplier if should_rerank else k
+        
+        logger.debug(
+            f"Query '{query[:30]}...' classified as {classification.complexity.value} "
+            f"(conf={classification.confidence:.2f}), rerank={should_rerank}"
+        )
         
         if mode == "dense":
             results = self._dense_search(query, search_k)
@@ -145,8 +160,8 @@ class HybridRetriever(BaseRetriever):
         else:
             results = self._hybrid_search(query, search_k, metadata_filter)
         
-        # Apply reranker if available
-        if self.reranker and use_reranker and results:
+        # Apply reranker based on classification
+        if should_rerank and results:
             results = self._apply_reranker(query, results, k)
         elif len(results) > k:
             results = results[:k]
