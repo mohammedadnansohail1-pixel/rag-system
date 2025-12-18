@@ -15,6 +15,7 @@ from qdrant_client.models import (
     Prefetch,
     FusionQuery,
     Fusion,
+    Modifier,
 )
 
 from src.vectorstores.base import BaseVectorStore, SearchResult
@@ -123,7 +124,7 @@ class QdrantHybridStore(BaseVectorStore):
                     )
                 },
                 sparse_vectors_config={
-                    self.SPARSE_VECTOR_NAME: SparseVectorParams()
+                    self.SPARSE_VECTOR_NAME: SparseVectorParams(modifier=Modifier.IDF)
                 }
             )
             logger.info(f"Created hybrid collection: {self.collection_name}")

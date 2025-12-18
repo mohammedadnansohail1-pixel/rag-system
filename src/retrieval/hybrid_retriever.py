@@ -10,6 +10,8 @@ from src.retrieval.sparse_encoder import (
 )
 from src.core.types import SparseVector
 from src.embeddings.base import BaseEmbeddings
+from src.retrieval.fastembed_sparse_encoder import FastEmbedSparseEncoder
+from src.reranking.base import BaseReranker
 from src.vectorstores.qdrant_hybrid_store import QdrantHybridStore
 
 logger = logging.getLogger(__name__)
@@ -57,9 +59,10 @@ class HybridRetriever(BaseRetriever):
         self,
         embeddings: BaseEmbeddings,
         vectorstore: QdrantHybridStore,
-        sparse_encoder: Union[str, Dict, BaseSparseEncoder, None] = "bm25",
+        sparse_encoder: Union[str, Dict, BaseSparseEncoder, None] = "fastembed",
         top_k: int = 5,
         score_threshold: Optional[float] = None,
+        reranker: Optional[BaseReranker] = None,
     ):
         """
         Initialize hybrid retriever.
@@ -79,6 +82,7 @@ class HybridRetriever(BaseRetriever):
         self.vectorstore = vectorstore
         self.top_k = top_k
         self.score_threshold = score_threshold
+        self.reranker = reranker
         
         # Initialize sparse encoder
         self.sparse_encoder = self._init_sparse_encoder(sparse_encoder)
@@ -86,7 +90,7 @@ class HybridRetriever(BaseRetriever):
 
         logger.info(
             f"Initialized HybridRetriever: "
-            f"sparse={self.sparse_encoder.__class__.__name__}, "
+            f"sparse={self.sparse_encoder.__class__.__name__}, reranker={reranker is not None}, "
             f"top_k={top_k}"
         )
 
@@ -95,8 +99,8 @@ class HybridRetriever(BaseRetriever):
         encoder: Union[str, Dict, BaseSparseEncoder, None]
     ) -> BaseSparseEncoder:
         """Initialize sparse encoder from various input types."""
-        if encoder is None:
-            return SparseEncoderFactory.create("bm25")
+        if encoder is None or encoder == "fastembed":
+            return FastEmbedSparseEncoder()
         
         if isinstance(encoder, BaseSparseEncoder):
             return encoder
@@ -115,6 +119,7 @@ class HybridRetriever(BaseRetriever):
         top_k: Optional[int] = None,
         mode: str = "hybrid",
         metadata_filter: Optional[Dict[str, Any]] = None,
+        use_reranker: bool = True,
     ) -> List[RetrievalResult]:
         """
         Retrieve relevant documents.
@@ -129,13 +134,45 @@ class HybridRetriever(BaseRetriever):
             List of RetrievalResult objects
         """
         k = top_k or self.top_k
-
+        
+        # Get more candidates if reranking
+        search_k = k * 3 if (self.reranker and use_reranker) else k
+        
         if mode == "dense":
-            return self._dense_search(query, k)
+            results = self._dense_search(query, search_k)
         elif mode == "sparse":
-            return self._sparse_search(query, k)
+            results = self._sparse_search(query, search_k)
         else:
-            return self._hybrid_search(query, k, metadata_filter)
+            results = self._hybrid_search(query, search_k, metadata_filter)
+        
+        # Apply reranker if available
+        if self.reranker and use_reranker and results:
+            results = self._apply_reranker(query, results, k)
+        elif len(results) > k:
+            results = results[:k]
+        
+        return results
+    
+    def _apply_reranker(
+        self, 
+        query: str, 
+        results: List[RetrievalResult], 
+        top_k: int
+    ) -> List[RetrievalResult]:
+        """Apply reranker to results."""
+        docs = [r.content for r in results]
+        metas = [r.metadata for r in results]
+        
+        reranked = self.reranker.rerank(query, docs, metas, top_n=top_k)
+        
+        return [
+            RetrievalResult(
+                content=r.content,
+                score=r.score,
+                metadata=r.metadata or {},
+            )
+            for r in reranked
+        ]
 
     def _dense_search(self, query: str, top_k: int) -> List[RetrievalResult]:
         """Dense-only search."""
