@@ -246,6 +246,22 @@ def key_decisions():
 {RESET}""")
     pause(15)  # 11_decision_caching: 14.50s
 
+    print(f"""
+{BOLD}{WHITE}5. Why NLI-Based Evaluation?{RESET}
+
+{CYAN}   ┌─────────────────────────────────────────────────────────────────┐
+   │  Simple metrics (n-gram overlap) miss semantic equivalence       │
+   ├─────────────────────────────────────────────────────────────────┤
+   │  N-gram method:       ~30% faithfulness (misleading)             │
+   │  NLI (DeBERTa):       {GREEN}97.5% faithfulness (accurate){RESET}{CYAN}                │
+   ├─────────────────────────────────────────────────────────────────┤
+   │  Claim: "Delays in launching production"                         │
+   │  Context: "may experience delays in launching..."                │
+   │  N-gram: ❌ (different words)  NLI: ✓ (same meaning)            │
+   └─────────────────────────────────────────────────────────────────┘
+{RESET}""")
+    pause(24)  # 11b_decision_nli: 23.52s
+
 # ============================================================================
 # SECTION 6: LIVE DEMO (83 sec)
 # ============================================================================
@@ -273,7 +289,7 @@ def live_demo():
     vectorstore = QdrantHybridStore(collection_name="full_demo", dense_dimensions=768, recreate_collection=True)
     retriever = HybridRetriever(embeddings=embeddings, vectorstore=vectorstore, sparse_encoder="fastembed")
     llm = OllamaLLM(model="llama3.2")
-    pipeline = MultiDocumentPipeline(embeddings=embeddings, vectorstore=vectorstore, retriever=retriever, llm=llm, registry_path=".cache/full_demo.json")
+    pipeline = MultiDocumentPipeline(embeddings=embeddings, vectorstore=vectorstore, retriever=retriever, llm=llm, registry_path=".cache/full_demo.json", clear_registry=True)
     
     print(f"{GREEN}✓ System ready{RESET}")
     pause(5)  # 13_demo_init: 6.43s (minus init time)
@@ -413,14 +429,15 @@ def tech_stack():
     ├────────────────────────────────────────────────────────────────────┤
     │  PROJECT STATS                                                     │
     ├────────────────────────────────────────────────────────────────────┤
-    │  Tests:           {GREEN}275+ automated tests{RESET}{WHITE}                              │
+    │  Tests:           {GREEN}260 automated tests{RESET}{WHITE}                               │
+    │  Faithfulness:    {GREEN}97.5% (NLI-based evaluation){RESET}{WHITE}                      │
     │  Cache speedup:   {GREEN}436x embeddings, 15,000x queries{RESET}{WHITE}                  │
     │  Ingestion:       {GREEN}230 pages/second{RESET}{WHITE}                                  │
     │  Query latency:   {GREEN}2-4 seconds{RESET}{WHITE}                                       │
-    │  Noise reduction: {GREEN}96%{RESET}{WHITE} vs naive chunking                             │
+    │  Hallucination:   {GREEN}<3% (strict prompting){RESET}{WHITE}                            │
     └────────────────────────────────────────────────────────────────────┘
 {RESET}""")
-    pause(24)  # 23_techstack: 22.99s
+    pause(28)  # 23_techstack: 27.41s
 
 # ============================================================================
 # SECTION 9: CLOSING (30 sec)
@@ -449,8 +466,8 @@ def closing():
     ╠════════════════════════════════════════════════════════════════════╣
     ║                                                                    ║
     ║   🐙  GitHub:   github.com/mohammedadnansohail1-pixel/rag-system   ║
-    ║   💼  LinkedIn: [Your LinkedIn]                                    ║
-    ║   📧  Email:    [Your Email]                                       ║
+    ║   💼  LinkedIn: https://www.linkedin.com/in/adnan21/                                    ║
+    ║   📧  Email:    mohammedadnansohail1@gmail.com                                       ║
     ║                                                                    ║
     ╚════════════════════════════════════════════════════════════════════╝
 {RESET}

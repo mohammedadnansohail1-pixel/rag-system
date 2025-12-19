@@ -191,10 +191,17 @@ class QdrantHybridStore(BaseVectorStore):
             )
             points.append(point)
         
-        self._client.upsert(
-            collection_name=self.collection_name,
-            points=points,
-        )
+        # Batch upsert to prevent timeout on large datasets
+        batch_size = 100
+        total = len(points)
+        for i in range(0, total, batch_size):
+            batch = points[i:i + batch_size]
+            self._client.upsert(
+                collection_name=self.collection_name,
+                points=batch,
+            )
+            if total > batch_size:
+                logger.info(f"Indexed batch {i//batch_size + 1}/{(total-1)//batch_size + 1}")
         
         logger.info(f"Added {len(points)} hybrid documents to {self.collection_name}")
         return ids

@@ -91,8 +91,9 @@ class CrossEncoderReranker(BaseReranker):
         logger.debug(f"Reranking {len(documents)} documents for query: {query[:50]}...")
         scores = self.model.predict(pairs, show_progress_bar=False)
         
-        # Convert numpy array to list of floats
-        scores = [float(s) for s in scores]
+        # Convert numpy array to list of floats and normalize with sigmoid
+        import math
+        scores = [1 / (1 + math.exp(-float(s))) for s in scores]  # Sigmoid normalization to 0-1
         
         # Build results using helper from base class
         results = self._build_results(documents, metadatas, scores, top_n)

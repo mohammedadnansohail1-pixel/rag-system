@@ -84,7 +84,7 @@ class HybridRetriever(BaseRetriever):
         self.top_k = top_k
         self.score_threshold = score_threshold
         self.reranker = reranker
-        self.query_classifier = QueryComplexityClassifier(use_llm_fallback=True)
+        self.query_classifier = QueryComplexityClassifier(use_llm_fallback=False)
         
         # Initialize sparse encoder
         self.sparse_encoder = self._init_sparse_encoder(sparse_encoder)

@@ -123,10 +123,17 @@ class QdrantVectorStore(BaseVectorStore):
                 payload=payload
             ))
         
-        self._client.upsert(
-            collection_name=self.collection_name,
-            points=points
-        )
+        # Batch upsert to avoid timeouts on large datasets
+        total = len(points)
+        batch_size = 100
+        for i in range(0, total, batch_size):
+            batch = points[i:i + batch_size]
+            self._client.upsert(
+                collection_name=self.collection_name,
+                points=batch
+            )
+            if total > batch_size:
+                logger.info(f"Indexed batch {i//batch_size + 1}/{(total-1)//batch_size + 1}")
         
         logger.info(f"Added {len(points)} documents to {self.collection_name}")
         return ids

@@ -50,6 +50,7 @@ class MultiDocumentPipeline(EnhancedRAGPipeline):
         llm: BaseLLM,
         config: Optional[EnhancedRAGConfig] = None,
         registry_path: str = ".cache/doc_registry.json",
+        clear_registry: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -62,6 +63,9 @@ class MultiDocumentPipeline(EnhancedRAGPipeline):
         )
         
         self.registry = DocumentRegistry(persist_path=registry_path)
+        if clear_registry:
+            self.registry.clear()
+            logger.info("Registry cleared")
         logger.info(f"MultiDocumentPipeline: {len(self.registry.all_documents)} docs in registry")
     
     def _generate_doc_id(self, source_path: str) -> str:

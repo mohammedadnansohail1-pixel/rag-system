@@ -2,145 +2,151 @@
   "01_hook": {
     "section": "hook",
     "after": "title",
-    "duration": 13.06,
+    "duration": 13.56,
     "text": "What if you could search 500 pages of documents an..."
   },
   "02_problem_intro": {
     "section": "problem",
     "after": "header",
-    "duration": 4.51,
+    "duration": 4.9,
     "text": "Every day, knowledge workers waste hours searching..."
   },
   "03_problem_analysts": {
     "section": "problem",
     "after": "pain_points",
-    "duration": 13.73,
+    "duration": 14.42,
     "text": "Financial analysts spend 40 or more hours reviewin..."
   },
   "04_problem_ai": {
     "section": "problem",
     "after": "ai_problems",
-    "duration": 12.22,
+    "duration": 14.04,
     "text": "And when people try AI chatbots, they face halluci..."
   },
   "05_solution": {
     "section": "solution",
     "after": "features",
-    "duration": 30.41,
+    "duration": 32.57,
     "text": "I built a production-grade RAG system that solves ..."
   },
   "06_arch_intro": {
     "section": "architecture",
     "after": "header",
-    "duration": 6.02,
+    "duration": 5.81,
     "text": "Let me walk you through the architecture. This is ..."
   },
   "07_arch_explain": {
     "section": "architecture",
     "after": "diagram",
-    "duration": 38.83,
+    "duration": 41.64,
     "text": "First, documents go through processing. Loaders ha..."
   },
   "08_decision_hybrid": {
     "section": "decisions",
     "after": "hybrid",
-    "duration": 13.58,
+    "duration": 14.45,
     "text": "Why hybrid search? Pure semantic search misses exa..."
   },
   "09_decision_confidence": {
     "section": "decisions",
     "after": "confidence",
-    "duration": 20.3,
+    "duration": 20.86,
     "text": "Why confidence scoring? Large language models hall..."
   },
   "10_decision_chunking": {
     "section": "decisions",
     "after": "chunking",
-    "duration": 14.42,
+    "duration": 15.36,
     "text": "Why structure-aware chunking? Fixed-size chunking ..."
   },
   "11_decision_caching": {
     "section": "decisions",
     "after": "caching",
-    "duration": 14.5,
+    "duration": 15.82,
     "text": "Why aggressive caching? Embedding generation is sl..."
+  },
+  "11b_decision_nli": {
+    "section": "decisions",
+    "after": "nli",
+    "duration": 25.46,
+    "text": "Why NLI-based evaluation? Simple n-gram metrics on..."
   },
   "12_demo_intro": {
     "section": "demo",
     "after": "header",
-    "duration": 5.3,
+    "duration": 5.95,
     "text": "Let's see it in action with real SEC filings from ..."
   },
   "13_demo_init": {
     "section": "demo",
     "after": "init",
-    "duration": 6.43,
+    "duration": 6.55,
     "text": "Initializing the system. This runs entirely locall..."
   },
   "14_demo_ingest": {
     "section": "demo",
     "after": "ingest_start",
-    "duration": 7.08,
+    "duration": 7.58,
     "text": "Loading 3 complete 10-K filings. That's over 500 p..."
   },
   "15_demo_ingest_done": {
     "section": "demo",
     "after": "ingest_done",
-    "duration": 9.43,
+    "duration": 10.25,
     "text": "Done. 531 chunks indexed in just over 2 seconds. E..."
   },
   "16_demo_query1": {
     "section": "demo",
     "after": "query1_start",
-    "duration": 4.42,
+    "duration": 4.44,
     "text": "Let's ask about factors affecting Meta's advertisi..."
   },
   "17_demo_query1_result": {
     "section": "demo",
     "after": "query1_result",
-    "duration": 14.16,
+    "duration": 14.86,
     "text": "Answer in under 5 seconds. HIGH confidence means s..."
   },
   "18_demo_query2": {
     "section": "demo",
     "after": "query2_start",
-    "duration": 6.46,
+    "duration": 6.82,
     "text": "Now filtering to just Tesla. Asking about manufact..."
   },
   "19_demo_query2_result": {
     "section": "demo",
     "after": "query2_result",
-    "duration": 10.49,
+    "duration": 10.94,
     "text": "Only Tesla's filing was searched. MEDIUM confidenc..."
   },
   "20_demo_compare": {
     "section": "demo",
     "after": "compare_start",
-    "duration": 7.2,
+    "duration": 7.44,
     "text": "Here's where it gets powerful. Comparing AI and ma..."
   },
   "21_demo_compare_result": {
     "section": "demo",
     "after": "compare_result",
-    "duration": 12.46,
+    "duration": 13.15,
     "text": "Structured comparison in under 5 seconds. Similari..."
   },
   "22_usecases": {
     "section": "usecases",
     "after": "list",
-    "duration": 24.77,
+    "duration": 25.85,
     "text": "This same system works for any document-heavy doma..."
   },
   "23_techstack": {
     "section": "techstack",
     "after": "stats",
-    "duration": 22.99,
+    "duration": 30.94,
     "text": "The tech stack includes Ollama for embeddings and ..."
   },
   "24_closing": {
     "section": "closing",
     "after": "cta",
-    "duration": 30.07,
+    "duration": 31.51,
     "text": "I build custom AI document systems for companies. ..."
   }
 }

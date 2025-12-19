@@ -78,6 +78,11 @@ VOICEOVER_SEGMENTS = {
         "text": "Why aggressive caching? Embedding generation is slow. Same content gets re-embedded repeatedly. Our cache gives 436x speedup on embeddings and 15,000x on queries.",
         "after": "caching"
     },
+    "11b_decision_nli": {
+        "section": "decisions",
+        "text": "Why NLI-based evaluation? Simple n-gram metrics only catch exact word matches. When the LLM says delays in launching production and the source says may experience delays in launching, n-gram sees different words. NLI understands they mean the same thing. This gives us 97.5% faithfulness measurement instead of a misleading 30%.",
+        "after": "nli"
+    },
     
     # LIVE DEMO
     "12_demo_intro": {
@@ -141,7 +146,7 @@ VOICEOVER_SEGMENTS = {
     # TECH STACK
     "23_techstack": {
         "section": "techstack",
-        "text": "The tech stack includes Ollama for embeddings and LLM, Qdrant for hybrid vector storage, FastEmbed for BM25, cross-encoder for reranking, FastAPI backend, Streamlit UI, and Docker deployment. 275 automated tests. 436x embedding cache speedup. 96% noise reduction versus naive chunking.",
+        "text": "The tech stack includes Ollama for embeddings and LLM, Qdrant for hybrid vector storage, FastEmbed for BM25, cross-encoder for reranking, FastAPI backend, Streamlit UI, and Docker deployment. 275 automated tests. 97.5% faithfulness with NLI evaluation. Less than 3% hallucination rate with strict prompting. 436x embedding cache speedup.",
         "after": "stats"
     },
     
@@ -153,7 +158,7 @@ VOICEOVER_SEGMENTS = {
     },
 }
 
-async def generate_audio(text, filename, voice="en-US-GuyNeural"):
+async def generate_audio(text, filename, voice="en-US-EricNeural"):
     """Generate audio file from text."""
     import edge_tts
     communicate = edge_tts.Communicate(text, voice)

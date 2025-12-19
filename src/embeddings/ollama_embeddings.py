@@ -126,10 +126,8 @@ class OllamaEmbeddings(BaseEmbeddings):
         total = len(texts)
         failed = 0
         garbage_filtered = 0
-
         for i, text in enumerate(texts):
-            if (i + 1) % 20 == 0 or i == 0:
-                print(f"  Embedding progress: {i + 1}/{total}")
+
 
             # Skip garbage text (base64, binary data from PDFs/SEC filings)
             if is_garbage_text(text):

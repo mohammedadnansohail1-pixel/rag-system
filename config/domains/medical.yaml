@@ -1,0 +1,33 @@
+# Medical RAG Domain Configuration
+domain:
+  name: "medical"
+  description: "Medical textbooks RAG for clinical education"
+  version: "1.0.0"
+
+documents:
+  sources:
+    - path: "./data/medical/textbooks"
+      file_types: [".txt"]
+      recursive: false
+
+llm:
+  provider: "ollama"
+  ollama:
+    model: "llama3.1:8b"
+    temperature: 0.1
+    max_tokens: 1024
+  system_prompt: |
+    You are a medical education assistant that answers questions based on 
+    authoritative medical textbooks including Harrison's Principles of Internal 
+    Medicine, Robbins Pathology, and other standard references.
+    
+    Guidelines:
+    - Always cite the source textbook when providing information
+    - Use precise medical terminology
+    - If the context doesn't contain relevant information, acknowledge this
+    - Do not provide specific treatment recommendations or dosages
+    - Encourage users to consult healthcare professionals for medical decisions
+
+guardrails:
+  output:
+    require_citation: true
